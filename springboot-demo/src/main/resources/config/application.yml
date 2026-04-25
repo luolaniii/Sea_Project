@@ -1,0 +1,81 @@
+spring:
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+  application:
+    name: study
+  jackson:
+    default-property-inclusion: non_null
+    date-format: yyyy-MM-dd HH:mm:ss
+
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+
+# DeepSeek AI 辅助决策（通过环境变量覆写 key）
+ai:
+  deepseek:
+    enabled: true
+    base-url: https://api.deepseek.com
+    api-key: ${DEEPSEEK_API_KEY:}
+    model: deepseek-chat
+    timeout-ms: 60000
+
+
+mybatis-plus:
+  global-config:
+    banner: false
+    db-config:
+      logic-delete-field: flag
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    # 使用 MyBatis-Plus 提供的 MybatisEnumTypeHandler，配合 @EnumValue 注解按 code 字段持久化枚举
+    default-enum-type-handler: com.baomidou.mybatisplus.core.handlers.MybatisEnumTypeHandler
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    map-underscore-to-camel-case: true
+
+
+--- #################### 连接池配置 ####################
+spring:
+  # 开启thymeleaf模板
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+    servlet:
+      content-type: text/html
+  datasource:
+    druid: # Druid 【连接池】相关的全局配置
+      initial-size: 5 # 初始连接数
+      min-idle: 5 # 最小连接池数量
+      max-active: 20 # 最大连接池数量
+      max-wait: 600000 # 配置获取连接等待超时的时间，单位：毫秒
+      time-between-eviction-runs-millis: 60000 # 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位：毫秒
+      min-evictable-idle-time-millis: 600000 # 配置一个连接在池中最小生存的时间，单位：毫秒
+      validation-query: SELECT 1 # 配置检测连接是否有效
+      test-while-idle: true
+      test-on-borrow: true
+      test-on-return: false
+      validation-query-timeout: 10000
+      connect-timeout: 30000
+      # 配置是否启用连接池监控统计功能
+      enable: true
+      # druid 监控界面
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        login-username: admin
+        login-password: lin112233..
+      web-stat-filter:
+        enabled: true
+        url-pattern: /*
+        exclusions: "*.js,*.gif,*.jpg,*.css,*.ico,/druid/*"
