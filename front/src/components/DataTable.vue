@@ -28,15 +28,16 @@
               </slot>
             </td>
             <td v-if="actions.length > 0" class="text-center">
-              <button
-                v-for="action in actions"
-                :key="action.key"
-                :class="['btn', `btn-${action.type || 'default'}`]"
-                @click="handleAction(action, row)"
-                style="margin: 0 4px; padding: 4px 12px; font-size: 12px"
-              >
-                {{ action.label }}
-              </button>
+              <div class="table-actions">
+                <button
+                  v-for="action in actions"
+                  :key="action.key"
+                  :class="['btn', `btn-${action.type || 'default'}`, 'table-action-btn']"
+                  @click="handleAction(action, row)"
+                >
+                  {{ action.label }}
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -157,40 +158,37 @@ const handleAction = (action: Action, row: any) => {
 .table-container {
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  border: 1px solid #dbe8f4;
+  box-shadow: 0 10px 24px -16px rgba(15, 23, 42, 0.35);
 }
 
 :deep(table) {
   width: 100%;
   border-collapse: collapse;
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(10px);
+  background: #ffffff;
 
   thead {
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.2), rgba(0, 212, 255, 0.15));
+    background: #f4f9ff;
 
     th {
-      padding: 16px 20px;
+      padding: 14px 18px;
       text-align: left;
       font-weight: 600;
-      font-size: 14px;
-      color: #e0f2ff;
-      border-bottom: 2px solid rgba(74, 144, 226, 0.4);
-      letter-spacing: 0.3px;
+      font-size: 13px;
+      color: #475569;
+      border-bottom: 1px solid #dbe8f4;
+      letter-spacing: 0.2px;
       white-space: nowrap;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     }
   }
 
   tbody {
     tr {
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      border-bottom: 1px solid #eef2f7;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
       &:hover {
-        background: rgba(74, 144, 226, 0.15);
-        transform: scale(1.01);
-        box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
+        background: #f8fbff;
       }
 
       &:last-child {
@@ -199,9 +197,9 @@ const handleAction = (action: Action, row: any) => {
     }
 
     td {
-      padding: 16px 20px;
+      padding: 14px 18px;
       font-size: 14px;
-      color: rgba(224, 242, 255, 0.9);
+      color: #334155;
       line-height: 1.6;
     }
   }
@@ -209,7 +207,7 @@ const handleAction = (action: Action, row: any) => {
 
 .text-center {
   text-align: center;
-  color: rgba(224, 242, 255, 0.6);
+  color: #64748b;
   padding: 40px 20px !important;
   font-size: 14px;
 }
@@ -236,7 +234,7 @@ const handleAction = (action: Action, row: any) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #ccc;
+  background-color: #d1d5db;
   transition: 0.4s;
   border-radius: 24px;
 }
@@ -254,15 +252,30 @@ const handleAction = (action: Action, row: any) => {
 }
 
 :deep(input:checked + .slider) {
-  background-color: #4caf50;
+  background-color: #0284c7;
 }
 
 :deep(input:focus + .slider) {
-  box-shadow: 0 0 1px #4caf50;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.18);
 }
 
 :deep(input:checked + .slider:before) {
   transform: translateX(22px);
+}
+
+.table-actions {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+:deep(.table-action-btn) {
+  min-width: 96px;
+  height: 32px;
+  padding: 0 14px;
+  font-size: 12px;
+  line-height: 1;
 }
 
 // 响应式设计

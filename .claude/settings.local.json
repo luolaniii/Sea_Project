@@ -1,13 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mvn -q compile -DskipTests)",
-      "Bash(mvn compile:*)",
-      "Bash(echo \"EXIT=$?\")",
-      "Bash(npx vue-tsc:*)",
-      "Bash(npm run:*)",
-      "Bash(npx vite:*)",
-      "Bash(npm install:*)"
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Read(//c/Users/20994/.claude/plugins/cache/**)",
+      "WebFetch(domain:www.ndbc.noaa.gov)",
+      "Bash(python -c ' *)"
     ]
   }
 }

@@ -18,8 +18,8 @@
             <span :class="['type-badge', post.postType === 'DATA_ANALYSIS' ? 'type-analysis' : 'type-topic']">
               {{ post.postType === 'DATA_ANALYSIS' ? '数据分析' : '主题讨论' }}
             </span>
-            <span v-if="post.postType === 'DATA_ANALYSIS'" :class="['reliability-badge', getReliabilityClass(post.reliabilityStatus)]">
-              {{ getReliabilityText(post.reliabilityStatus) }}（{{ post.reliabilityScore || 0 }}）
+            <span v-if="post.postType === 'DATA_ANALYSIS'" :class="['reliability-badge', getReliabilityClass(post)]">
+              {{ getReliabilityText(post) }}（{{ post.reliabilityScore || 0 }}）
             </span>
           </div>
           <h1 class="post-title">{{ post.title }}</h1>
@@ -63,6 +63,11 @@
           </div>
           <div class="analysis-card">
             <div class="analysis-title">专家评估</div>
+            <div class="review-standard">
+              <span>结束标准：至少 3 名专家提交有效评估。</span>
+              <span>可信标准：专家综合均分达到 70 分及以上。</span>
+              <b>{{ evaluationProgressText }}</b>
+            </div>
             <div v-if="evaluations.length === 0" class="empty-hint">暂无专家评估</div>
             <div v-else class="evaluation-list">
               <div v-for="item in evaluations" :key="item.id" class="evaluation-item">
@@ -264,7 +269,7 @@
       title="确认删除"
       @confirm="confirmDeleteComment"
     >
-      <div style="padding: 20px 0; color: rgba(224, 242, 255, 0.9);">
+      <div style="padding: 20px 0; color: #334155;">
         <p style="font-size: 16px; margin: 0;">确定要删除这条评论吗？删除后无法恢复。</p>
       </div>
     </Modal>
@@ -274,7 +279,7 @@
       title="确认删除附件"
       @confirm="confirmDeleteAttachment"
     >
-      <div style="padding: 20px 0; color: rgba(224, 242, 255, 0.9);">
+      <div style="padding: 20px 0; color: #334155;">
         <p style="font-size: 16px; margin: 0;">确定删除这个附件吗？删除后无法恢复。</p>
       </div>
     </Modal>
@@ -316,6 +321,8 @@ const detailUploading = ref(false);
 const deleteAttachmentModalVisible = ref(false);
 const deletingAttachmentId = ref<string | null>(null);
 const isExpertUser = computed(() => authStore.userInfo?.role === 'expert' || authStore.userInfo?.role === 'admin');
+const REQUIRED_EVALUATIONS = 3;
+const RELIABILITY_PASS_SCORE = 70;
 const canManageAttachment = (item: ForumAttachment) => {
   const role = String(authStore.userInfo?.role || '').toLowerCase();
   const currentUserId = authStore.userInfo?.id;
@@ -374,15 +381,29 @@ const parseTags = (tags?: string): string[] => {
   }
 };
 
-const getReliabilityText = (status?: number) => {
-  if (status === 2) return '已认证';
-  if (status === 1) return '评选中';
+const evaluationProgressText = computed(() => {
+  const count = Number(post.value?.evaluationCount ?? evaluations.value.length ?? 0);
+  const score = Number(post.value?.reliabilityScore ?? 0);
+  if (count < REQUIRED_EVALUATIONS) return `当前 ${count}/${REQUIRED_EVALUATIONS}，仍在评估中`;
+  if (score >= RELIABILITY_PASS_SCORE) return `已结束：最终均分 ${score}，结论可信`;
+  return `已结束：最终均分 ${score}，未达到可信阈值`;
+});
+
+const getReliabilityText = (item?: ForumPost | null) => {
+  const count = Number(item?.evaluationCount ?? 0);
+  const score = Number(item?.reliabilityScore ?? 0);
+  if (item?.reliabilityStatus === 2) return '已认证';
+  if (count >= REQUIRED_EVALUATIONS) return score >= RELIABILITY_PASS_SCORE ? '已认证' : '未通过认证';
+  if (count > 0) return `评估中 ${count}/${REQUIRED_EVALUATIONS}`;
   return '未评选';
 };
 
-const getReliabilityClass = (status?: number) => {
-  if (status === 2) return 'reliability-certified';
-  if (status === 1) return 'reliability-progress';
+const getReliabilityClass = (item?: ForumPost | null) => {
+  const count = Number(item?.evaluationCount ?? 0);
+  const score = Number(item?.reliabilityScore ?? 0);
+  if (item?.reliabilityStatus === 2) return 'reliability-certified';
+  if (count >= REQUIRED_EVALUATIONS && score < RELIABILITY_PASS_SCORE) return 'reliability-failed';
+  if (item?.reliabilityStatus === 1 || count > 0) return 'reliability-progress';
   return 'reliability-none';
 };
 
@@ -854,8 +875,28 @@ onMounted(() => {
   background: rgba(253, 203, 110, 0.5);
 }
 
+.reliability-failed {
+  background: rgba(220, 38, 38, 0.62);
+}
+
 .reliability-certified {
   background: rgba(0, 184, 148, 0.7);
+}
+
+.review-standard {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fbff;
+  border: 1px solid #dbe8f4;
+  color: #334155;
+  font-size: 12px;
+
+  b {
+    color: #0369a1;
+  }
 }
 
 .post-title {
@@ -1281,6 +1322,178 @@ onMounted(() => {
   padding: 60px 20px;
   color: rgba(255, 255, 255, 0.6);
   font-size: 16px;
+}
+
+/* 浅色主色调可读性覆盖 */
+.back-btn {
+  background: #ffffff;
+  border-color: #dbe8f4;
+  color: #334155;
+
+  &:hover {
+    background: #f0f9ff;
+    border-color: #7dd3fc;
+    color: #0f172a;
+  }
+}
+
+.post-title {
+  color: #0f172a;
+}
+
+.post-meta {
+  color: #64748b;
+}
+
+.post-meta span:hover {
+  color: #0f172a;
+}
+
+.analysis-target {
+  color: #334155;
+}
+
+.analysis-card {
+  background: #f8fbff;
+  border-color: #dbe8f4;
+}
+
+.analysis-title {
+  color: #0f172a;
+}
+
+.vote-summary,
+.evaluation-sub,
+.empty-hint,
+.attachment-pending {
+  color: #475569;
+}
+
+.evaluation-item,
+.attachment-row {
+  background: #ffffff;
+  border-color: #dbe8f4;
+}
+
+.evaluation-head,
+.evaluation-comment {
+  color: #334155;
+}
+
+.attachment-link {
+  color: #0369a1;
+}
+
+.attachment-size {
+  color: #64748b;
+}
+
+.tag {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #0369a1;
+}
+
+.post-text {
+  color: #334155;
+
+  :deep(h1),
+  :deep(h2),
+  :deep(h3) {
+    color: #0f172a;
+  }
+
+  :deep(strong) {
+    color: #0f172a;
+  }
+
+  :deep(code) {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+}
+
+.post-actions {
+  border-top-color: #dbe8f4;
+}
+
+.action-btn {
+  background: #ffffff;
+  border-color: #dbe8f4;
+  color: #334155;
+
+  &:hover {
+    background: #f0f9ff;
+    border-color: #7dd3fc;
+    color: #0f172a;
+  }
+}
+
+.section-title {
+  color: #0f172a;
+  border-bottom-color: #dbe8f4;
+}
+
+.comment-input,
+.score-input {
+  background: #ffffff;
+  border-color: #dbe8f4;
+  color: #0f172a;
+
+  &::placeholder {
+    color: #94a3b8;
+  }
+
+  &:focus {
+    border-color: #7dd3fc;
+    background: #ffffff;
+  }
+}
+
+.comment-item {
+  background: #f8fbff;
+  border-color: #dbe8f4;
+
+  &:hover {
+    background: #f0f9ff;
+    border-color: #bae6fd;
+  }
+
+  &.is-reply {
+    background: #f8fbff;
+  }
+}
+
+.comment-author {
+  color: #0f172a;
+}
+
+.comment-time {
+  color: #94a3b8;
+}
+
+.comment-content {
+  color: #334155;
+}
+
+.comment-action {
+  color: #64748b;
+
+  &:hover {
+    background: #e2e8f0;
+    color: #334155;
+  }
+}
+
+.reply-form,
+.comment-children {
+  border-top-color: #dbe8f4;
+  border-left-color: #dbe8f4;
+}
+
+.no-comments,
+.text-center {
+  color: #64748b;
 }
 
 // 响应式设计

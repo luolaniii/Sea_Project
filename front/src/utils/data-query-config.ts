@@ -53,6 +53,24 @@ const asNumber = (v: any): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+const firstDefined = (...values: any[]) => values.find((v) => v !== undefined && v !== null && v !== '');
+
+const mergeTypeCodes = (...values: unknown[]): string[] | undefined => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  values.forEach((value) => {
+    const list = parseTypeCodes(value);
+    if (!list) return;
+    list.forEach((code) => {
+      const key = code.trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push(key);
+    });
+  });
+  return out.length ? out : undefined;
+};
+
 /** 数据源/类型等主键：JSON 中建议用字符串存 Snowflake；数值仅在安全整数范围内转 number */
 const asIdField = (v: any): string | number | undefined => {
   if (v === undefined || v === null || v === '') return undefined;
@@ -74,19 +92,23 @@ export const parseDataQueryConfigJson = (configJson?: string): DataQueryConfig |
   try {
     const parsed = JSON.parse(quoteJsonLongIntegerFields(configJson));
     if (!parsed || typeof parsed !== 'object') return null;
-    const dq = parsed as any;
+    const root = parsed as any;
+    const nested = root.dataQuery && typeof root.dataQuery === 'object' ? root.dataQuery : undefined;
+    const dq = nested || root;
     return {
-      dataSourceId: asIdField(dq.dataSourceId),
-      dataTypeId: asIdField(dq.dataTypeId),
-      typeCodes: parseTypeCodes(dq.typeCodes),
-      startTime: dq.startTime ?? undefined,
-      endTime: dq.endTime ?? undefined,
-      minLongitude: asNumber(dq.minLongitude),
-      maxLongitude: asNumber(dq.maxLongitude),
-      minLatitude: asNumber(dq.minLatitude),
-      maxLatitude: asNumber(dq.maxLatitude),
-      pageSize: asNumber(dq.pageSize) ?? 1000,
-      time: dq.time && typeof dq.time === 'object' ? (dq.time as RelativeTimeConfig) : undefined,
+      dataSourceId: asIdField(firstDefined(root.dataSourceId, root.autoGenSourceId, nested?.dataSourceId, nested?.autoGenSourceId)),
+      dataTypeId: asIdField(firstDefined(root.dataTypeId, nested?.dataTypeId)),
+      typeCodes: mergeTypeCodes(root.typeCodes, nested?.typeCodes),
+      startTime: firstDefined(dq.startTime, root.startTime),
+      endTime: firstDefined(dq.endTime, root.endTime),
+      minLongitude: asNumber(firstDefined(dq.minLongitude, root.minLongitude)),
+      maxLongitude: asNumber(firstDefined(dq.maxLongitude, root.maxLongitude)),
+      minLatitude: asNumber(firstDefined(dq.minLatitude, root.minLatitude)),
+      maxLatitude: asNumber(firstDefined(dq.maxLatitude, root.maxLatitude)),
+      pageSize: asNumber(firstDefined(dq.pageSize, root.pageSize)) ?? 1000,
+      time: firstDefined(dq.time, root.time) && typeof firstDefined(dq.time, root.time) === 'object'
+        ? (firstDefined(dq.time, root.time) as RelativeTimeConfig)
+        : undefined,
     };
   } catch (e) {
     console.error('解析 dataQueryConfig 失败:', e);

@@ -31,9 +31,44 @@
         <button class="btn btn-default" :disabled="!composite" @click="exportJson">导出JSON</button>
         <button class="btn btn-default" :disabled="!composite" @click="exportCsv">导出CSV</button>
       </div>
+      <div v-if="stationCtx" class="station-context">
+        <span class="ctx-chip">
+          <Icon name="database" :size="12" />
+          {{ stationCtx.stationTypeDesc }}
+        </span>
+        <span class="ctx-chip">
+          <Icon name="signal" :size="12" />
+          {{ stationCtx.stationLabel }}
+        </span>
+        <button class="ctx-btn" :disabled="!stationCtx.sceneId" @click="goToScene">
+          <Icon name="scene" :size="12" /> 3D 场景
+        </button>
+        <button class="ctx-btn" :disabled="!stationCtx.chartId" @click="goToChart">
+          <Icon name="chart" :size="12" /> 图表页
+        </button>
+        <button class="ctx-btn ctx-btn-ghost" :disabled="!stationCtx.officialUrl" @click="openOfficial">
+          <Icon name="external" :size="12" /> 站点官网
+        </button>
+      </div>
     </div>
 
     <div v-if="errorMsg" class="error card">{{ errorMsg }}</div>
+
+    <section v-if="volatileSegments.length" class="card volatility-panel">
+      <div class="volatility-head">
+        <h3>剧烈变化时间段</h3>
+        <span>对应"异常预警 / 稳定性 / 舒适度 / 短期趋势"四项分析的剧变窗口</span>
+      </div>
+      <div class="volatility-list">
+        <div v-for="seg in volatileSegments" :key="`${seg.typeCode}-${seg.startTime}-${seg.endTime}`" :class="['volatility-item', seg.level]">
+          <span class="metric">{{ seg.typeLabel }}</span>
+          <span class="time">{{ seg.startTime }} ~ {{ seg.endTime }}</span>
+          <span class="delta">变化 {{ seg.delta }}</span>
+          <span class="values">{{ seg.fromValue }} → {{ seg.toValue }}</span>
+          <span v-for="tag in seg.analyses" :key="tag" :class="['analysis-tag', `tag-${tagSlug(tag)}`]">{{ tag }}</span>
+        </div>
+      </div>
+    </section>
 
     <div class="grid">
       <section class="card">
@@ -135,7 +170,7 @@
           <h4>温度趋势（TEMP/SST）</h4>
           <svg viewBox="0 0 600 180" class="sparkline" @mousemove="onTempMove" @mouseleave="hoverTemp = null">
             <polyline :points="tempLinePoints" fill="none" stroke="#4ecdc4" stroke-width="2" />
-            <line v-if="hoverTemp" :x1="hoverTemp.x" y1="10" :x2="hoverTemp.x" y2="170" stroke="rgba(255,255,255,.35)" stroke-width="1" />
+            <line v-if="hoverTemp" :x1="hoverTemp.x" y1="10" :x2="hoverTemp.x" y2="170" stroke="rgba(15,23,42,.25)" stroke-width="1" />
           </svg>
           <div v-if="hoverTemp" class="axis-tip">{{ hoverTemp.label }}</div>
           <div class="axis-labels">
@@ -149,7 +184,7 @@
           <h4>潮位趋势（SEA_LEVEL）</h4>
           <svg viewBox="0 0 600 180" class="sparkline" @mousemove="onTideMove" @mouseleave="hoverTide = null">
             <polyline :points="tideLinePoints" fill="none" stroke="#5b8ff9" stroke-width="2" />
-            <line v-if="hoverTide" :x1="hoverTide.x" y1="10" :x2="hoverTide.x" y2="170" stroke="rgba(255,255,255,.35)" stroke-width="1" />
+            <line v-if="hoverTide" :x1="hoverTide.x" y1="10" :x2="hoverTide.x" y2="170" stroke="rgba(15,23,42,.25)" stroke-width="1" />
           </svg>
           <div v-if="hoverTide" class="axis-tip">{{ hoverTide.label }}</div>
           <div class="axis-labels">
@@ -167,9 +202,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { userApi, type DataSourceItem, type OceanAbnormalResult, type OceanComfortResult, type OceanCompositeResult, type OceanStabilityResult, type OceanTrendResult } from '@/utils/api-user';
 import Icon from '@/components/Icon.vue';
+import { buildVolatileSegmentsFromSeries } from '@/utils/volatile-segments';
 
 const loading = ref(false);
 const errorMsg = ref('');
@@ -181,6 +217,7 @@ const comfort = ref<OceanComfortResult | null>(null);
 const trend = ref<OceanTrendResult | null>(null);
 const composite = ref<OceanCompositeResult | null>(null);
 const dataSourceList = ref<DataSourceItem[]>([]);
+const mapStations = ref<any[]>([]);
 const hoverTemp = ref<{ x: number; label: string } | null>(null);
 const hoverTide = ref<{ x: number; label: string } | null>(null);
 
@@ -189,6 +226,28 @@ const form = ref({
   startTime: '',
   endTime: '',
   historyHours: 24,
+});
+const router = useRouter();
+
+const stationCtx = computed(() => {
+  if (!form.value.dataSourceId) return null;
+  const id = String(form.value.dataSourceId);
+  const hit = mapStations.value.find((s: any) => String(s?.id) === id);
+  const ds = dataSourceList.value.find((x) => String(x?.id ?? '') === id);
+  const chartId = hit?.charts?.[0]?.id ?? null;
+  const sceneId = hit?.scenes?.[0]?.id ?? null;
+  const stationLabel = hit?.name || ds?.sourceName || hit?.stationId || ds?.stationId || id;
+  const stationTypeDesc = hit?.stationTypeDesc || hit?.sourceType || ds?.stationTypeDesc || ds?.sourceType || '未分类站点';
+  const fallbackOfficial = ds?.stationId ? `https://www.ndbc.noaa.gov/station_page.php?station=${ds.stationId}` : '';
+  const officialUrl = String(hit?.officialUrl || hit?.apiUrl || ds?.officialUrl || ds?.apiUrl || fallbackOfficial || '').trim();
+  return {
+    dataSourceId: id,
+    stationLabel,
+    stationTypeDesc,
+    chartId,
+    sceneId,
+    officialUrl,
+  };
 });
 
 const loadAll = async () => {
@@ -229,6 +288,30 @@ const loadDataSources = async () => {
   }
 };
 
+const loadMapStations = async () => {
+  try {
+    mapStations.value = await userApi.getMapStations();
+  } catch {
+    mapStations.value = [];
+  }
+};
+
+const goToScene = () => {
+  if (!stationCtx.value?.sceneId) return;
+  router.push(`/user/scene/${encodeURIComponent(String(stationCtx.value.sceneId))}`);
+};
+
+const goToChart = () => {
+  if (!stationCtx.value?.chartId) return;
+  router.push(`/user/chart/${encodeURIComponent(String(stationCtx.value.chartId))}`);
+};
+
+const openOfficial = () => {
+  const url = stationCtx.value?.officialUrl;
+  if (!url) return;
+  window.open(url, '_blank');
+};
+
 const makePoints = (values: number[]) => {
   if (!values.length) return '';
   const min = Math.min(...values);
@@ -266,6 +349,17 @@ const tempAxisStart = computed(() => formatTime(tempSeries.value[0]?.t));
 const tempAxisEnd = computed(() => formatTime(tempSeries.value[tempSeries.value.length - 1]?.t));
 const tideAxisStart = computed(() => formatTime(tideSeries.value[0]?.t));
 const tideAxisEnd = computed(() => formatTime(tideSeries.value[tideSeries.value.length - 1]?.t));
+const volatileSegments = computed(() => buildVolatileSegmentsFromSeries(composite.value?.series || [], 10));
+
+const tagSlug = (tag: string): string => {
+  switch (tag) {
+    case '异常预警': return 'alarm';
+    case '稳定性': return 'stability';
+    case '舒适度': return 'comfort';
+    case '短期趋势': return 'trend';
+    default: return 'other';
+  }
+};
 
 const gaugePathByScore = (score?: number) => {
   const v = Math.max(0, Math.min(100, Number(score ?? 0)));
@@ -408,6 +502,7 @@ onMounted(async () => {
     form.value.dataSourceId = urlDsId;
   }
   await loadDataSources();
+  await loadMapStations();
   if (urlDsId) {
     // 站点地图携带 dataSourceId 时自动分析
     loadAll();
@@ -421,47 +516,168 @@ onMounted(async () => {
   flex-direction: column;
   gap: 16px;
 }
-.header h1 { margin: 0 0 8px; color: #fff; }
-.header p { margin: 0 0 12px; color: rgba(255,255,255,.8); }
+.header h1 { margin: 0 0 8px; color: #0f172a; }
+.header p { margin: 0 0 12px; color: #475569; }
 .filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
   align-items: end;
 }
-label { display: flex; flex-direction: column; gap: 6px; color: rgba(255,255,255,.85); font-size: 13px; }
+label { display: flex; flex-direction: column; gap: 6px; color: #334155; font-size: 13px; }
 input {
-  height: 34px; border-radius: 8px; border: 1px solid rgba(102,126,234,.4);
-  background: rgba(0,0,0,.2); color: #fff; padding: 0 10px;
+  height: 34px; border-radius: 8px; border: 1px solid #dbe8f4;
+  background: #ffffff; color: #0f172a; padding: 0 10px;
 }
 select {
-  height: 34px; border-radius: 8px; border: 1px solid rgba(102,126,234,.4);
-  background: rgba(0,0,0,.2); color: #fff; padding: 0 10px;
+  height: 34px; border-radius: 8px; border: 1px solid #dbe8f4;
+  background: #ffffff; color: #0f172a; padding: 0 10px;
+}
+.station-context {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.ctx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #ecfeff;
+  border: 1px solid #a5f3fc;
+  color: #0c4a6e;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ctx-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dbe8f4;
+  background: #f8fbff;
+  color: #0f172a;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ctx-btn:hover:not(:disabled) {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+}
+.ctx-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ctx-btn-ghost {
+  background: #fff;
+  color: #475569;
 }
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
 }
-.kv { display: flex; justify-content: space-between; margin: 8px 0; color: rgba(255,255,255,.85); }
-.score { font-size: 34px; font-weight: 700; color: #fff; margin: 6px 0 10px; }
+.kv { display: flex; justify-content: space-between; margin: 8px 0; color: #334155; }
+.score { font-size: 34px; font-weight: 700; color: #0f172a; margin: 6px 0 10px; }
 .ok { color: #3ddc97; }
 .warn { color: #ffb547; }
 .danger { color: #ff6b6b; }
-.hint { color: rgba(255,200,140,.9); font-size: 12px; line-height: 1.6; margin: 8px 0 0; }
-.summary { color: rgba(220,240,255,.92); font-size: 13px; margin: 8px 0 0; }
-.error { color: #ffb3b3; }
+.hint { color: #b45309; font-size: 12px; line-height: 1.6; margin: 8px 0 0; }
+.summary { color: #334155; font-size: 13px; margin: 8px 0 0; }
+.error {
+  color: #dc2626;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+.volatility-panel {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #dbe8f4;
+}
+.volatility-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.volatility-head h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+}
+.volatility-head span {
+  color: #475569;
+  font-size: 12px;
+}
+.volatility-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+.volatility-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fbff;
+  border: 1px solid #dbe8f4;
+  color: #334155;
+  font-size: 12px;
+}
+.volatility-item.high {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+.volatility-item .metric {
+  grid-row: span 2;
+  align-self: center;
+  color: #0369a1;
+  font-weight: 700;
+}
+.volatility-item .time {
+  color: #0f172a;
+  font-weight: 600;
+}
+.volatility-item .delta,
+.volatility-item .values {
+  color: #475569;
+}
+.volatility-item .analysis-tag {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 2px;
+  margin-right: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  border: 1px solid;
+  display: inline-block;
+}
+.tag-alarm { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.tag-stability { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.tag-comfort { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.tag-trend { background: #fefce8; color: #a16207; border-color: #fde68a; }
 .chart-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
-.chart-block h4 { margin: 0 0 8px; color: #fff; }
-.sparkline { width: 100%; height: 180px; background: rgba(8, 16, 38, 0.45); border-radius: 8px; border: 1px solid rgba(102,126,234,.25); }
-.axis-labels { display: flex; justify-content: space-between; color: rgba(255,255,255,.65); font-size: 12px; margin-top: 6px; }
-.axis-tip { color: #ffd699; font-size: 12px; margin-top: 6px; }
+.chart-block h4 { margin: 0 0 8px; color: #0f172a; }
+.sparkline { width: 100%; height: 180px; background: #f8fbff; border-radius: 8px; border: 1px solid #dbe8f4; }
+.axis-labels { display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-top: 6px; }
+.axis-tip { color: #0369a1; font-size: 12px; margin-top: 6px; }
 .alarm-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 12px; }
 .alarm-level { text-align: center; padding: 6px 0; border-radius: 6px; font-size: 12px; opacity: .45; border: 1px solid transparent; }
-.alarm-level.safe { background: rgba(61,220,151,.18); color: #7ff0bf; }
-.alarm-level.warn { background: rgba(255,181,71,.18); color: #ffcc7a; }
-.alarm-level.danger { background: rgba(255,107,107,.18); color: #ff9f9f; }
-.alarm-level.active { opacity: 1; border-color: rgba(255,255,255,.35); box-shadow: 0 0 10px rgba(255,255,255,.15) inset; }
+.alarm-level.safe { background: rgba(22,163,74,.12); color: #16a34a; }
+.alarm-level.warn { background: rgba(217,119,6,.12); color: #d97706; }
+.alarm-level.danger { background: rgba(220,38,38,.12); color: #dc2626; }
+.alarm-level.active { opacity: 1; border-color: rgba(15,23,42,.15); box-shadow: inset 0 0 0 1px rgba(255,255,255,.55); }
 .gauge-wrap { display: flex; justify-content: center; margin-bottom: 4px; }
 .gauge { width: 100%; max-width: 300px; height: 120px; }
 .gauge-seg { fill: none; stroke-width: 12; stroke-linecap: round; opacity: .75; }
@@ -471,22 +687,22 @@ select {
 .gauge-fg { fill: none; stroke-width: 14; stroke-linecap: round; }
 .gauge-fg.stability { stroke: #5b8ff9; }
 .gauge-fg.comfort { stroke: #4ecdc4; }
-.gauge-value { fill: #fff; font-size: 28px; font-weight: 700; }
-.gauge-tick { fill: rgba(255,255,255,.68); font-size: 11px; }
+.gauge-value { fill: #0f172a; font-size: 28px; font-weight: 700; }
+.gauge-tick { fill: #64748b; font-size: 11px; }
 .badge-row { display: flex; justify-content: center; margin: 4px 0 8px; }
-.badge { padding: 4px 10px; border-radius: 12px; background: rgba(91,143,249,.2); border: 1px solid rgba(91,143,249,.4); color: #dfeeff; font-size: 12px; }
+.badge { padding: 4px 10px; border-radius: 12px; background: #e0f2fe; border: 1px solid #bae6fd; color: #0369a1; font-size: 12px; }
 
 /* DeepSeek AI 卡片 */
 .ai-card {
-  background: linear-gradient(135deg, rgba(102,126,234,.18), rgba(118,75,162,.14));
-  border: 1px solid rgba(146,180,255,.35);
+  background: linear-gradient(135deg, rgba(224, 242, 254, 0.95), rgba(236, 253, 255, 0.95));
+  border: 1px solid #cce8f8;
   position: relative;
   overflow: hidden;
 }
 .ai-card::before {
   content: '';
   position: absolute; inset: 0;
-  background: radial-gradient(600px 200px at 0% 0%, rgba(142, 197, 255, .14), transparent 60%);
+  background: radial-gradient(600px 200px at 0% 0%, rgba(125, 211, 252, 0.28), transparent 60%);
   pointer-events: none;
 }
 .ai-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -495,7 +711,7 @@ select {
   align-items: center;
   gap: 10px;
   margin: 0;
-  color: #fff;
+  color: #0f172a;
   letter-spacing: .3px;
   font-size: 16px;
   font-weight: 600;
@@ -507,19 +723,19 @@ select {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(0,212,255,.18), rgba(102,126,234,.14));
-  border: 1px solid rgba(0,212,255,.35);
-  box-shadow: 0 0 14px rgba(0,212,255,.18);
+  background: linear-gradient(135deg, rgba(2,132,199,.14), rgba(14,165,233,.12));
+  border: 1px solid rgba(2,132,199,.25);
+  box-shadow: 0 0 14px rgba(2,132,199,.1);
 }
 .ai-head .ai-tag {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   letter-spacing: 1.6px;
-  color: rgba(0,212,255,.7);
+  color: #0284c7;
   padding: 3px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(0,212,255,.3);
-  background: rgba(0,212,255,.06);
+  border: 1px solid #bae6fd;
+  background: rgba(224,242,254,.9);
 }
 .ai-head .btn { display: inline-flex; align-items: center; gap: 6px; }
 .ai-head .btn .spin { animation: aiSpin 1s linear infinite; }
@@ -528,9 +744,9 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #ffb3b3;
-  background: rgba(255, 122, 144, .08);
-  border: 1px solid rgba(255, 122, 144, .3);
+  color: #b91c1c;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
   padding: 8px 12px;
   border-radius: 8px;
   margin-top: 10px;
@@ -538,24 +754,24 @@ select {
 .ai-content {
   margin-top: 12px;
   padding: 14px 16px;
-  background: rgba(8, 16, 38, 0.55);
-  border: 1px solid rgba(102,126,234,.3);
+  background: #ffffff;
+  border: 1px solid #dbe8f4;
   border-radius: 10px;
-  color: rgba(230,240,255,.92);
+  color: #334155;
   line-height: 1.75;
   font-size: 14px;
-  :deep(h2) { font-size: 18px; color: #ffd180; margin: 6px 0 8px; }
-  :deep(h3) { font-size: 16px; color: #b6f0ff; margin: 8px 0 6px; }
-  :deep(h4) { font-size: 14px; color: #c8e6ff; margin: 6px 0 4px; }
+  :deep(h2) { font-size: 18px; color: #0f172a; margin: 6px 0 8px; }
+  :deep(h3) { font-size: 16px; color: #0369a1; margin: 8px 0 6px; }
+  :deep(h4) { font-size: 14px; color: #0284c7; margin: 6px 0 4px; }
   :deep(ul) { padding-left: 22px; margin: 4px 0 8px; }
   :deep(li) { margin: 3px 0; }
   :deep(p)  { margin: 6px 0; }
-  :deep(b)  { color: #ffd180; }
+  :deep(b)  { color: #0f172a; }
 }
 .ai-meta {
   margin-top: 8px;
   display: flex; gap: 14px; flex-wrap: wrap;
-  color: rgba(180,200,230,.7); font-size: 12px;
+  color: #64748b; font-size: 12px;
 }
 </style>
 

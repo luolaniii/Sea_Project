@@ -30,6 +30,47 @@ type Observation = {
   depth?: number;
 };
 
+const LIGHT_TEXT = '#334155';
+const LIGHT_AXIS = '#94a3b8';
+
+const normalizeChartType = (raw?: string) => {
+  const source = String(raw || '').trim();
+  const upper = source.toUpperCase();
+  const map: Record<string, string> = {
+    LINE: 'LINE',
+    折线图: 'LINE',
+    BAR: 'BAR',
+    柱状图: 'BAR',
+    SCATTER: 'SCATTER',
+    散点图: 'SCATTER',
+    HEATMAP: 'HEATMAP',
+    热力图: 'HEATMAP',
+    '3D_SURFACE': '3D_SURFACE',
+    '3D表面图': '3D_SURFACE',
+    '3D 表面图': '3D_SURFACE',
+  };
+  return map[source] || map[upper] || 'LINE';
+};
+
+const sanitizeEchartsConfig = (config: EChartsOption): EChartsOption => {
+  const safe = { ...(config as any) };
+  if (Array.isArray((safe as any).series)) {
+    (safe as any).series = (safe as any).series.map((item: any) => {
+      if (!item || typeof item !== 'object') return item;
+      if (item.type === 'surface') {
+        // 前端未引入 echarts-gl，surface 类型会导致渲染失败，这里自动降级为折线图
+        return {
+          ...item,
+          type: 'line',
+          smooth: true,
+        };
+      }
+      return item;
+    });
+  }
+  return safe;
+};
+
 const parseTimeMs = (t?: string) => {
   const ms = parseObservationTimeToMs(t ?? '');
   return Number.isNaN(ms) ? -1 : ms;
@@ -73,29 +114,29 @@ const tryParseEchartsConfig = (): EChartsOption | null => {
 };
 
 const buildOption = (): EChartsOption => {
-  const data = props.data || [];
-  const source = buildDatasetSource(data);
+  const rawData = props.data || [];
+  const source = buildDatasetSource(rawData);
 
-  // 优先使用 SQL / chart_config.echarts_config 的配置（这是你 config.sql 里的“设计稿”）
-  const base = tryParseEchartsConfig();
-  if (base) {
+  // 有实时数据时，优先走统一兜底渲染，避免被历史 echartsConfig（暗色/不兼容配置）渲染成空白
+  if (rawData.length > 0 || source.length > 0) {
+    const option = generateOption();
     return {
-      backgroundColor: 'transparent',
-      ...base,
-      dataset: {
-        // 如果 base 自带 dataset，这里用实时数据覆盖 source，避免“配置对但没数据”
-        ...(typeof (base as any).dataset === 'object' ? (base as any).dataset : {}),
-        source,
-      } as any,
+      ...option,
+      dataset: { source } as any,
     };
   }
 
-  // 没有 echartsConfig 时才走兜底的自动生成
-  const option = generateOption();
-  return {
-    ...option,
-    dataset: { source } as any,
-  };
+  // 没有实时数据时才回退到配置稿，尽量给出结构化占位
+  const base = tryParseEchartsConfig();
+  if (base) {
+    const safeBase = sanitizeEchartsConfig(base);
+    return {
+      backgroundColor: 'transparent',
+      ...safeBase,
+    };
+  }
+
+  return generateLineOption([]);
 };
 
 const initChart = () => {
@@ -103,12 +144,17 @@ const initChart = () => {
 
   chartInstance = echarts.init(chartRef.value);
 
-  const option = buildOption();
-  chartInstance.setOption(option, true);
+  try {
+    const option = buildOption();
+    chartInstance.setOption(option, true);
+  } catch (e) {
+    console.error('设置图表配置失败，使用兜底折线图:', e);
+    chartInstance.setOption(generateLineOption(props.data || []), true);
+  }
 };
 
 const generateOption = (): EChartsOption => {
-  const chartType = props.chartType || 'LINE';
+  const chartType = normalizeChartType(props.chartType);
   const data = props.data || [];
 
   switch (chartType) {
@@ -121,7 +167,7 @@ const generateOption = (): EChartsOption => {
     case 'HEATMAP':
       return generateHeatmapOption(data);
     case '3D_SURFACE':
-      return generate3DSurfaceOption(data);
+      return generateHeatmapOption(data);
     default:
       return generateLineOption(data);
   }
@@ -134,7 +180,7 @@ const generateLineOption = (data: any[]): EChartsOption => {
   return {
     backgroundColor: 'transparent',
     textStyle: {
-      color: '#fff',
+      color: LIGHT_TEXT,
     },
     grid: {
       left: '3%',
@@ -147,15 +193,26 @@ const generateLineOption = (data: any[]): EChartsOption => {
       data: xData,
       axisLine: {
         lineStyle: {
-          color: '#fff',
+          color: LIGHT_AXIS,
         },
+      },
+      axisLabel: {
+        color: LIGHT_TEXT,
       },
     },
     yAxis: {
       type: 'value',
       axisLine: {
         lineStyle: {
-          color: '#fff',
+          color: LIGHT_AXIS,
+        },
+      },
+      axisLabel: {
+        color: LIGHT_TEXT,
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#e2e8f0',
         },
       },
     },
@@ -192,7 +249,7 @@ const generateBarOption = (data: any[]): EChartsOption => {
   return {
     backgroundColor: 'transparent',
     textStyle: {
-      color: '#fff',
+      color: LIGHT_TEXT,
     },
     grid: {
       left: '3%',
@@ -205,15 +262,26 @@ const generateBarOption = (data: any[]): EChartsOption => {
       data: xData,
       axisLine: {
         lineStyle: {
-          color: '#fff',
+          color: LIGHT_AXIS,
         },
+      },
+      axisLabel: {
+        color: LIGHT_TEXT,
       },
     },
     yAxis: {
       type: 'value',
       axisLine: {
         lineStyle: {
-          color: '#fff',
+          color: LIGHT_AXIS,
+        },
+      },
+      axisLabel: {
+        color: LIGHT_TEXT,
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#e2e8f0',
         },
       },
     },
@@ -242,7 +310,7 @@ const generateScatterOption = (data: any[]): EChartsOption => {
   return {
     backgroundColor: 'transparent',
     textStyle: {
-      color: '#fff',
+      color: LIGHT_TEXT,
     },
     grid: {
       left: '3%',
@@ -255,7 +323,15 @@ const generateScatterOption = (data: any[]): EChartsOption => {
       name: '经度',
       axisLine: {
         lineStyle: {
-          color: '#fff',
+          color: LIGHT_AXIS,
+        },
+      },
+      axisLabel: {
+        color: LIGHT_TEXT,
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#e2e8f0',
         },
       },
     },
@@ -264,7 +340,15 @@ const generateScatterOption = (data: any[]): EChartsOption => {
       name: '纬度',
       axisLine: {
         lineStyle: {
-          color: '#fff',
+          color: LIGHT_AXIS,
+        },
+      },
+      axisLabel: {
+        color: LIGHT_TEXT,
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#e2e8f0',
         },
       },
     },
@@ -287,11 +371,14 @@ const generateHeatmapOption = (data: any[]): EChartsOption => {
     item.latitude || item.y || 0,
     item.dataValue || item.value || 0,
   ]);
+  const maxValue = data.length > 0
+    ? Math.max(...data.map((item) => Number(item.dataValue || item.value || 0)))
+    : 100;
 
   return {
     backgroundColor: 'transparent',
     textStyle: {
-      color: '#fff',
+      color: LIGHT_TEXT,
     },
     grid: {
       left: '3%',
@@ -304,7 +391,15 @@ const generateHeatmapOption = (data: any[]): EChartsOption => {
       name: '经度',
       axisLine: {
         lineStyle: {
-          color: '#fff',
+          color: LIGHT_AXIS,
+        },
+      },
+      axisLabel: {
+        color: LIGHT_TEXT,
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#e2e8f0',
         },
       },
     },
@@ -313,19 +408,27 @@ const generateHeatmapOption = (data: any[]): EChartsOption => {
       name: '纬度',
       axisLine: {
         lineStyle: {
-          color: '#fff',
+          color: LIGHT_AXIS,
+        },
+      },
+      axisLabel: {
+        color: LIGHT_TEXT,
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#e2e8f0',
         },
       },
     },
     visualMap: {
       min: 0,
-      max: Math.max(...data.map((item) => item.dataValue || item.value || 0)),
+      max: Number.isFinite(maxValue) && maxValue > 0 ? maxValue : 100,
       calculable: true,
       inRange: {
         color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#ffffcc', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026'],
       },
       textStyle: {
-        color: '#fff',
+        color: LIGHT_TEXT,
       },
     },
     series: [
@@ -378,8 +481,13 @@ const handleResize = () => {
 
 const refresh = () => {
   if (!chartInstance) return;
-  const option = buildOption();
-  chartInstance.setOption(option, true);
+  try {
+    const option = buildOption();
+    chartInstance.setOption(option, true);
+  } catch (e) {
+    console.error('刷新图表失败，使用兜底折线图:', e);
+    chartInstance.setOption(generateLineOption(props.data || []), true);
+  }
 };
 
 watch(
@@ -395,6 +503,13 @@ watch(
     refresh();
   },
   { deep: true }
+);
+
+watch(
+  () => props.chartType,
+  () => {
+    refresh();
+  }
 );
 
 onMounted(() => {

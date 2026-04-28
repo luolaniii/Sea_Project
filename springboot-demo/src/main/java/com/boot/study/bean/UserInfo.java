@@ -24,4 +24,9 @@ public class UserInfo {
      * 学生端    STUDENT
      */
     private String role;
+
+    /**
+     * 头像 URL（如 /uploads/avatar/xxx.png）
+     */
+    private String avatar;
 }

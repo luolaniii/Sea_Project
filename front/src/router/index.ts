@@ -74,6 +74,16 @@ const router = createRouter({
           name: ROUTE_NAMES.ADMIN_FORUM_POST,
           component: () => import('@/views/admin/ForumPostPage.vue'),
         },
+        {
+          path: 'expert-application',
+          name: ROUTE_NAMES.ADMIN_EXPERT_APPLICATION,
+          component: () => import('@/views/admin/ExpertApplicationPage.vue'),
+        },
+        {
+          path: 'recharge',
+          name: ROUTE_NAMES.ADMIN_RECHARGE,
+          component: () => import('@/views/admin/RechargeOrderPage.vue'),
+        },
       ],
     },
     {
@@ -89,6 +99,11 @@ const router = createRouter({
           path: 'home',
           name: ROUTE_NAMES.USER_HOME,
           component: () => import('@/views/user/UserHome.vue'),
+        },
+        {
+          path: 'profile',
+          name: ROUTE_NAMES.USER_PROFILE,
+          component: () => import('@/views/user/UserProfile.vue'),
         },
         {
           path: 'scene-gallery',
@@ -108,7 +123,7 @@ const router = createRouter({
         {
           path: 'ocean-comparison',
           name: 'UserOceanComparison',
-          component: () => import('@/views/user/UserOceanComparison.vue'),
+          redirect: '/user/station-map',
         },
         {
           path: 'station-map',
@@ -139,6 +154,26 @@ const router = createRouter({
           path: 'my-posts',
           name: ROUTE_NAMES.USER_MY_POSTS,
           component: () => import('@/views/user/MyPosts.vue'),
+        },
+        {
+          path: 'expert-apply',
+          name: ROUTE_NAMES.USER_EXPERT_APPLY,
+          component: () => import('@/views/user/UserExpertApply.vue'),
+        },
+        {
+          path: 'wallet',
+          name: ROUTE_NAMES.USER_WALLET,
+          redirect: ROUTE_PATHS.USER.PROFILE,
+        },
+        {
+          path: 'membership',
+          name: ROUTE_NAMES.USER_MEMBERSHIP,
+          redirect: ROUTE_PATHS.USER.PROFILE,
+        },
+        {
+          path: 'orders',
+          name: ROUTE_NAMES.USER_ORDERS,
+          component: () => import('@/views/user/UserOrders.vue'),
         },
       ],
     },

@@ -65,6 +65,7 @@ public class AuthServiceImpl implements AuthService {
                 .username(user.getUsername())
                 .role(user.getRole())
                 .token(tokenInfo.getToken())
+                .avatar(user.getAvatar())
                 .build();
         
         // 缓存 token -> UserInfo，使用全局前缀

@@ -10,12 +10,14 @@ import com.boot.study.api.req.user.UserChartPageReq;
 import com.boot.study.dao.ChartConfigMapper;
 import com.boot.study.entity.ChartConfig;
 import com.boot.study.entity.ChartConfigVO;
+import com.boot.study.entity.DataSource;
 import com.boot.study.entity.ObservationDataType;
 import com.boot.study.entity.ObservationDataVO;
 import com.boot.study.enums.PublicFlagEnum;
 import com.boot.study.exception.ServiceException;
 import com.boot.study.response.PageBean;
 import com.boot.study.service.ChartConfigService;
+import com.boot.study.service.DataSourceService;
 import com.boot.study.service.ObservationDataService;
 import com.boot.study.service.ObservationDataTypeService;
 import com.boot.study.utils.DateTimeUtil;
@@ -26,7 +28,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -45,6 +52,7 @@ public class ChartConfigServiceImpl extends BaseServiceImpl<ChartConfigMapper, C
 
     private final ObservationDataService observationDataService;
     private final ObservationDataTypeService observationDataTypeService;
+    private final DataSourceService dataSourceService;
 
     /**
      * 分页查询图表配置
@@ -58,27 +66,45 @@ public class ChartConfigServiceImpl extends BaseServiceImpl<ChartConfigMapper, C
     @Override
     public PageBean<ChartConfig> pageList(ChartConfigPageReq req) {
         LambdaQueryWrapper<ChartConfig> wrapper = Wrappers.lambdaQuery();
-        
+
         // 图表名称模糊查询
         if (StringUtils.hasText(req.getChartName())) {
             wrapper.like(ChartConfig::getChartName, req.getChartName());
         }
-        
+
         // 图表类型精确查询
         if (req.getChartType() != null) {
             wrapper.eq(ChartConfig::getChartType, req.getChartType());
         }
-        
+
         // 是否公开精确查询
         if (req.getIsPublic() != null) {
             wrapper.eq(ChartConfig::getIsPublic, req.getIsPublic());
         }
-        
+
         // 按创建时间倒序排列
         wrapper.orderByDesc(ChartConfig::getCreatedTime);
 
-        Page<ChartConfig> page = this.page(PageHelperUtil.page(req), wrapper);
-        return PageBean.page(page, page.getRecords());
+        // 仅名称/类型/公开状态筛选时走数据库分页；涉及站点/数据类型/经纬度时走内存过滤分页
+        if (!hasAdvancedChartFilter(req)) {
+            Page<ChartConfig> page = this.page(PageHelperUtil.page(req), wrapper);
+            return PageBean.page(page, page.getRecords());
+        }
+
+        List<ChartConfig> all = this.list(wrapper);
+        List<ChartConfig> filtered = applyAdvancedChartFilters(
+                all,
+                req.getStationKeyword(),
+                req.getStationType(),
+                req.getOceanRegion(),
+                req.getProgramOwner(),
+                req.getDataTypeCode(),
+                req.getMinLongitude(),
+                req.getMaxLongitude(),
+                req.getMinLatitude(),
+                req.getMaxLatitude()
+        );
+        return paginateList(filtered, req.getPageNum(), req.getPageSize());
     }
 
     /**
@@ -137,24 +163,42 @@ public class ChartConfigServiceImpl extends BaseServiceImpl<ChartConfigMapper, C
         // 按创建时间倒序排列
         wrapper.orderByDesc(ChartConfig::getCreatedTime);
 
-        // 分页查询
-        Page<ChartConfig> page = this.page(PageHelperUtil.page(req), wrapper);
+        PageBean<ChartConfig> pageBean;
+        if (!hasAdvancedChartFilter(req)) {
+            // 分页查询
+            Page<ChartConfig> page = this.page(PageHelperUtil.page(req), wrapper);
+            pageBean = PageBean.page(page, page.getRecords());
+        } else {
+            List<ChartConfig> all = this.list(wrapper);
+            List<ChartConfig> filtered = applyAdvancedChartFilters(
+                    all,
+                    req.getStationKeyword(),
+                    req.getStationType(),
+                    req.getOceanRegion(),
+                    req.getProgramOwner(),
+                    req.getDataTypeCode(),
+                    req.getMinLongitude(),
+                    req.getMaxLongitude(),
+                    req.getMinLatitude(),
+                    req.getMaxLatitude()
+            );
+            pageBean = paginateList(filtered, req.getPageNum(), req.getPageSize());
+        }
 
         // 转换为VO
-        List<ChartConfigVO> voList = page.getRecords().stream()
+        List<ChartConfigVO> voList = pageBean.getList().stream()
                 .map(EnumConvertUtil::convertChartConfig)
                 .collect(Collectors.toList());
 
         // 构建VO分页结果
-        PageBean<ChartConfigVO> pageBean = new PageBean<>();
-        pageBean.setList(voList);
-        pageBean.setTotal((int) page.getTotal());
-        pageBean.setPageNum(req.getPageNum());
-        pageBean.setPageSize(req.getPageSize());
-        pageBean.setSize(page.getRecords().size());
-        pageBean.setPages((int) page.getPages());
-
-        return pageBean;
+        PageBean<ChartConfigVO> voPageBean = new PageBean<>();
+        voPageBean.setList(voList);
+        voPageBean.setTotal(pageBean.getTotal());
+        voPageBean.setPageNum(pageBean.getPageNum());
+        voPageBean.setPageSize(pageBean.getPageSize());
+        voPageBean.setSize(voList.size());
+        voPageBean.setPages(pageBean.getPages());
+        return voPageBean;
     }
 
     /**
@@ -208,35 +252,26 @@ public class ChartConfigServiceImpl extends BaseServiceImpl<ChartConfigMapper, C
         dataReq.setPageNum(req.getPageNum());
         dataReq.setPageSize(req.getPageSize());
 
-        // 1. 先从图表配置中的 dataQueryConfig 解析出 dataSourceId、typeCodes 等
-        if (StringUtils.hasText(chart.getDataQueryConfig())) {
-            try {
-                com.alibaba.fastjson2.JSONObject config =
-                        com.alibaba.fastjson2.JSON.parseObject(chart.getDataQueryConfig());
-                if (config != null) {
-                    Long cfgDataSourceId = config.getLong("dataSourceId");
-                    if (cfgDataSourceId != null) {
-                        dataReq.setDataSourceId(cfgDataSourceId);
-                    }
-
-                    // 解析 typeCodes（例如 ["WIND_SPEED","PRESSURE"]），转换为数据类型ID集合
-                    List<String> typeCodes = config.getList("typeCodes", String.class);
-                    if (typeCodes != null && !typeCodes.isEmpty()) {
-                        List<ObservationDataType> types = observationDataTypeService.list(
-                                Wrappers.<ObservationDataType>lambdaQuery()
-                                        .in(ObservationDataType::getTypeCode, typeCodes)
-                        );
-                        if (!types.isEmpty()) {
-                            List<Long> typeIds = types.stream()
-                                    .map(ObservationDataType::getId)
-                                    .filter(Objects::nonNull)
-                                    .collect(Collectors.toList());
-                            dataReq.setDataTypeIds(typeIds);
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                log.error("解析图表 dataQueryConfig 失败, chartId={}", chartId, e);
+        // 1. 先从图表配置中的 dataQueryConfig 解析出 dataSourceId、dataTypeId、typeCodes 等
+        ChartQueryMeta configMeta = parseChartQueryMeta(chart.getDataQueryConfig());
+        if (configMeta.dataSourceId != null) {
+            dataReq.setDataSourceId(configMeta.dataSourceId);
+        }
+        if (configMeta.dataTypeId != null) {
+            dataReq.setDataTypeId(configMeta.dataTypeId);
+        }
+        if (configMeta.typeCodes != null && !configMeta.typeCodes.isEmpty()) {
+            List<ObservationDataType> types = observationDataTypeService.list(
+                    Wrappers.<ObservationDataType>lambdaQuery()
+                            .in(ObservationDataType::getTypeCode, configMeta.typeCodes)
+            );
+            if (!types.isEmpty()) {
+                List<Long> typeIds = types.stream()
+                        .map(ObservationDataType::getId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                dataReq.setDataTypeId(null);
+                dataReq.setDataTypeIds(typeIds);
             }
         }
 
@@ -277,6 +312,297 @@ public class ChartConfigServiceImpl extends BaseServiceImpl<ChartConfigMapper, C
 
         return pageBean;
     }
+
+    private static final class ChartQueryMeta {
+        private Long dataSourceId;
+        private Long dataTypeId;
+        private List<String> typeCodes;
+    }
+
+    private boolean hasAdvancedChartFilter(ChartConfigPageReq req) {
+        return StringUtils.hasText(req.getStationKeyword())
+                || StringUtils.hasText(req.getStationType())
+                || StringUtils.hasText(req.getOceanRegion())
+                || StringUtils.hasText(req.getProgramOwner())
+                || StringUtils.hasText(req.getDataTypeCode())
+                || req.getMinLongitude() != null
+                || req.getMaxLongitude() != null
+                || req.getMinLatitude() != null
+                || req.getMaxLatitude() != null;
+    }
+
+    private boolean hasAdvancedChartFilter(UserChartPageReq req) {
+        return StringUtils.hasText(req.getStationKeyword())
+                || StringUtils.hasText(req.getStationType())
+                || StringUtils.hasText(req.getOceanRegion())
+                || StringUtils.hasText(req.getProgramOwner())
+                || StringUtils.hasText(req.getDataTypeCode())
+                || req.getMinLongitude() != null
+                || req.getMaxLongitude() != null
+                || req.getMinLatitude() != null
+                || req.getMaxLatitude() != null;
+    }
+
+    private List<ChartConfig> applyAdvancedChartFilters(
+            List<ChartConfig> source,
+            String stationKeyword,
+            String stationType,
+            String oceanRegion,
+            String programOwner,
+            String dataTypeCode,
+            BigDecimal minLongitude,
+            BigDecimal maxLongitude,
+            BigDecimal minLatitude,
+            BigDecimal maxLatitude
+    ) {
+        if (source == null || source.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        boolean needDataSource = StringUtils.hasText(stationKeyword)
+                || StringUtils.hasText(stationType)
+                || StringUtils.hasText(oceanRegion)
+                || StringUtils.hasText(programOwner)
+                || minLongitude != null
+                || maxLongitude != null
+                || minLatitude != null
+                || maxLatitude != null;
+        Map<Long, DataSource> dataSourceMap = Collections.emptyMap();
+        if (needDataSource) {
+            dataSourceMap = dataSourceService.list().stream()
+                    .filter(ds -> ds.getId() != null)
+                    .collect(Collectors.toMap(DataSource::getId, ds -> ds, (a, b) -> a, HashMap::new));
+        }
+
+        String dataTypeCodeNorm = normalizeCode(dataTypeCode);
+        Map<Long, String> dataTypeIdToCode = Collections.emptyMap();
+        if (StringUtils.hasText(dataTypeCodeNorm)) {
+            dataTypeIdToCode = observationDataTypeService.list().stream()
+                    .filter(t -> t.getId() != null && StringUtils.hasText(t.getTypeCode()))
+                    .collect(Collectors.toMap(ObservationDataType::getId, t -> normalizeCode(t.getTypeCode()), (a, b) -> a, HashMap::new));
+        }
+
+        final String stationKeywordNorm = lowerTrim(stationKeyword);
+        final String stationTypeNorm = normalizeCode(stationType);
+        final String oceanRegionNorm = normalizeCode(oceanRegion);
+        final String programOwnerNorm = lowerTrim(programOwner);
+        final Map<Long, DataSource> finalDataSourceMap = dataSourceMap;
+        final Map<Long, String> finalDataTypeIdToCode = dataTypeIdToCode;
+
+        return source.stream().filter(chart -> {
+            ChartQueryMeta meta = parseChartQueryMeta(chart.getDataQueryConfig());
+            DataSource ds = meta.dataSourceId != null ? finalDataSourceMap.get(meta.dataSourceId) : null;
+
+            // 站点关键词
+            if (StringUtils.hasText(stationKeywordNorm)) {
+                boolean matched = false;
+                if (ds != null) {
+                    String sourceName = lowerTrim(ds.getSourceName());
+                    String stationId = lowerTrim(ds.getStationId());
+                    if (sourceName.contains(stationKeywordNorm) || stationId.contains(stationKeywordNorm)) {
+                        matched = true;
+                    }
+                }
+                // 兜底：扫描图表名 + dataQueryConfig，覆盖未链接 dataSourceId 但配置/标题包含站点的图表
+                if (!matched) {
+                    String chartName = lowerTrim(chart.getChartName());
+                    if (chartName.contains(stationKeywordNorm)) matched = true;
+                }
+                if (!matched && StringUtils.hasText(chart.getDataQueryConfig())) {
+                    if (chart.getDataQueryConfig().toLowerCase().contains(stationKeywordNorm)) {
+                        matched = true;
+                    }
+                }
+                if (!matched) {
+                    return false;
+                }
+            }
+
+            // 站点类型（sourceType）
+            if (StringUtils.hasText(stationTypeNorm)) {
+                if (ds == null || !stationTypeCode(ds).equals(stationTypeNorm)) {
+                    return false;
+                }
+            }
+
+            // 海域分类（按站点经纬度推断）
+            if (StringUtils.hasText(oceanRegionNorm)) {
+                if (ds == null || !resolveOceanRegion(ds.getLatitude(), ds.getLongitude()).equals(oceanRegionNorm)) {
+                    return false;
+                }
+            }
+
+            // 归属/项目/Owner 关键词
+            if (StringUtils.hasText(programOwnerNorm)) {
+                if (ds == null || !resolveProgramOwner(ds).contains(programOwnerNorm)) {
+                    return false;
+                }
+            }
+
+            // 经纬度范围（按数据源坐标）
+            if (minLongitude != null || maxLongitude != null || minLatitude != null || maxLatitude != null) {
+                if (ds == null || ds.getLongitude() == null || ds.getLatitude() == null) {
+                    return false;
+                }
+                if (!inRange(ds.getLongitude(), minLongitude, maxLongitude) || !inRange(ds.getLatitude(), minLatitude, maxLatitude)) {
+                    return false;
+                }
+            }
+
+            // 数据类型编码（typeCodes 或 dataTypeId 映射）
+            if (StringUtils.hasText(dataTypeCodeNorm)) {
+                boolean hit = false;
+                if (meta.typeCodes != null) {
+                    hit = meta.typeCodes.stream().anyMatch(c -> normalizeCode(c).equals(dataTypeCodeNorm));
+                }
+                if (!hit && meta.dataTypeId != null) {
+                    String code = finalDataTypeIdToCode.get(meta.dataTypeId);
+                    if (StringUtils.hasText(code)) {
+                        hit = code.equals(dataTypeCodeNorm);
+                    }
+                }
+                if (!hit) {
+                    return false;
+                }
+            }
+
+            return true;
+        }).collect(Collectors.toList());
+    }
+
+    private ChartQueryMeta parseChartQueryMeta(String dataQueryConfig) {
+        ChartQueryMeta meta = new ChartQueryMeta();
+        meta.typeCodes = Collections.emptyList();
+        if (!StringUtils.hasText(dataQueryConfig)) {
+            return meta;
+        }
+        try {
+            com.alibaba.fastjson2.JSONObject json = com.alibaba.fastjson2.JSON.parseObject(dataQueryConfig);
+            if (json == null) return meta;
+            com.alibaba.fastjson2.JSONObject dataQuery = json.getJSONObject("dataQuery");
+            meta.dataSourceId = firstLong(
+                    json.getLong("dataSourceId"),
+                    json.getLong("autoGenSourceId"),
+                    dataQuery == null ? null : dataQuery.getLong("dataSourceId"),
+                    dataQuery == null ? null : dataQuery.getLong("autoGenSourceId")
+            );
+            meta.dataTypeId = firstLong(
+                    json.getLong("dataTypeId"),
+                    dataQuery == null ? null : dataQuery.getLong("dataTypeId")
+            );
+
+            List<String> typeCodes = new ArrayList<>();
+            addTypeCodes(typeCodes, json.getList("typeCodes", String.class));
+            if (dataQuery != null) {
+                addTypeCodes(typeCodes, dataQuery.getList("typeCodes", String.class));
+            }
+            if (typeCodes != null && !typeCodes.isEmpty()) {
+                meta.typeCodes = typeCodes;
+            }
+        } catch (Exception e) {
+            log.debug("解析图表 dataQueryConfig 失败，忽略高级筛选条件。config={}", dataQueryConfig, e);
+        }
+        return meta;
+    }
+
+    private Long firstLong(Long... values) {
+        if (values == null) return null;
+        for (Long value : values) {
+            if (value != null) return value;
+        }
+        return null;
+    }
+
+    private void addTypeCodes(List<String> target, List<String> source) {
+        if (target == null || source == null) return;
+        for (String code : source) {
+            if (StringUtils.hasText(code)) {
+                target.add(code);
+            }
+        }
+    }
+
+    private String normalizeCode(String raw) {
+        if (!StringUtils.hasText(raw)) return "";
+        return raw.trim().toUpperCase();
+    }
+
+    private String lowerTrim(String raw) {
+        if (!StringUtils.hasText(raw)) return "";
+        return raw.trim().toLowerCase();
+    }
+
+    private boolean inRange(BigDecimal value, BigDecimal min, BigDecimal max) {
+        if (value == null) return false;
+        if (min != null && value.compareTo(min) < 0) return false;
+        if (max != null && value.compareTo(max) > 0) return false;
+        return true;
+    }
+
+    private String stationTypeCode(DataSource ds) {
+        String suffix = ds.getFileSuffixes() == null ? "" : ds.getFileSuffixes().toLowerCase();
+        String config = ds.getConfigJson() == null ? "" : ds.getConfigJson().toLowerCase();
+        if (suffix.contains("dart") || config.contains("\"dart\":true") || config.contains("\"dart\":\"y\"")) return "DART";
+        if (suffix.contains("adcp") || config.contains("\"currents\":true") || config.contains("\"currents\":\"y\"")) return "CURRENT";
+        if (suffix.contains("tide") || suffix.contains("wlevel")) return "WATER_LEVEL";
+        if (suffix.contains("spec") || suffix.contains("data_spec") || suffix.contains("swden")) return "WAVE";
+        if (suffix.contains("ocean") || config.contains("\"waterquality\":true") || config.contains("\"waterquality\":\"y\"")) return "OCEAN";
+        if (suffix.contains("txt") || suffix.contains("cwind") || suffix.contains("rain") || suffix.contains("srad")
+                || config.contains("\"met\":true") || config.contains("\"met\":\"y\"")) return "MET";
+        return normalizeCode(ds.getSourceType());
+    }
+
+    private String resolveOceanRegion(BigDecimal lat, BigDecimal lon) {
+        if (lat == null || lon == null) return "";
+        double la = lat.doubleValue();
+        double lo = lon.doubleValue();
+        while (lo > 180) lo -= 360;
+        while (lo <= -180) lo += 360;
+        if (la >= 66.5) return "ARCTIC";
+        if (la <= -60) return "SOUTHERN";
+        if (la >= 18 && la <= 31 && lo >= -98 && lo <= -80) return "GULF_OF_MEXICO";
+        if (la >= 41 && la <= 49 && lo >= -93 && lo <= -76) return "GREAT_LAKES";
+        if (la >= -60 && la <= 70 && lo >= -70 && lo <= 20) return "ATLANTIC";
+        if (la >= -60 && la <= 30 && lo >= 20 && lo <= 100) return "INDIAN";
+        return "PACIFIC";
+    }
+
+    private String resolveProgramOwner(DataSource ds) {
+        if (ds == null) return "";
+        String desc = StringUtils.hasText(ds.getDescription()) ? ds.getDescription() : "";
+        String config = ds.getConfigJson();
+        if (StringUtils.hasText(config)) {
+            try {
+                com.alibaba.fastjson2.JSONObject json = com.alibaba.fastjson2.JSON.parseObject(config);
+                if (json != null) {
+                    String owner = json.getString("owner");
+                    String program = json.getString("program");
+                    if (StringUtils.hasText(owner)) return lowerTrim(owner);
+                    if (StringUtils.hasText(program)) return lowerTrim(program);
+                }
+            } catch (Exception ignored) {
+                // ignore invalid config json
+            }
+        }
+        if ("NOAA".equalsIgnoreCase(ds.getSourceType())) return "noaa ndbc";
+        return lowerTrim(desc);
+    }
+
+    private PageBean<ChartConfig> paginateList(List<ChartConfig> list, int pageNum, int pageSize) {
+        int safePageNum = Math.max(1, pageNum);
+        int safePageSize = Math.max(1, pageSize);
+        int total = list == null ? 0 : list.size();
+        int from = Math.min((safePageNum - 1) * safePageSize, total);
+        int to = Math.min(from + safePageSize, total);
+        List<ChartConfig> pageList = total == 0 ? Collections.emptyList() : list.subList(from, to);
+
+        PageBean<ChartConfig> bean = new PageBean<>();
+        bean.setPageNum(safePageNum);
+        bean.setPageSize(safePageSize);
+        bean.setTotal(total);
+        bean.setPages((int) Math.ceil(total / (double) safePageSize));
+        bean.setSize(pageList.size());
+        bean.setList(pageList);
+        return bean;
+    }
 }
-
-

@@ -29,8 +29,18 @@
         <select v-model="selectedReliabilityStatus" class="filter-select" @change="handleSearch">
           <option value="">全部可靠性</option>
           <option value="0">未评选</option>
-          <option value="1">评选中</option>
+          <option value="1">评估中/未通过</option>
           <option value="2">已认证</option>
+        </select>
+        <select v-model="selectedEvaluationCompleted" class="filter-select" @change="handleSearch">
+          <option value="">评估完成度</option>
+          <option value="1">已完成评估</option>
+          <option value="0">未完成评估</option>
+        </select>
+        <select v-model="selectedReliabilityTrusted" class="filter-select" @change="handleSearch">
+          <option value="">可信结果</option>
+          <option value="1">可信</option>
+          <option value="0">不可信</option>
         </select>
         <input
           v-model="keyword"
@@ -73,8 +83,8 @@
         <div class="post-header">
           <span v-if="post.isEssence" class="essence-badge">精华</span>
           <span :class="['type-badge', getPostTypeClass(post.postType)]">{{ getPostTypeLabel(post.postType) }}</span>
-          <span v-if="post.postType === 'DATA_ANALYSIS'" :class="['reliability-badge', getReliabilityClass(post.reliabilityStatus)]">
-            {{ getReliabilityText(post.reliabilityStatus) }}
+          <span v-if="post.postType === 'DATA_ANALYSIS'" :class="['reliability-badge', getReliabilityClass(post)]">
+            {{ getReliabilityText(post) }}
           </span>
           <h3 class="post-title" @click="goToDetail(post.id!)">{{ post.title }}</h3>
         </div>
@@ -197,6 +207,8 @@ const total = ref(0);
 const selectedCategory = ref<string>('');
 const selectedPostType = ref<string>('');
 const selectedReliabilityStatus = ref<string>('');
+const selectedEvaluationCompleted = ref<string>('');
+const selectedReliabilityTrusted = ref<string>('');
 const keyword = ref('');
 const showPublishDialog = ref(false);
 const tagsInput = ref('');
@@ -228,6 +240,10 @@ const loadPosts = async () => {
       keyword: keyword.value || undefined,
       postType: selectedPostType.value || undefined,
       reliabilityStatus: selectedReliabilityStatus.value === '' ? undefined : Number(selectedReliabilityStatus.value),
+      evaluationCompleted:
+        selectedEvaluationCompleted.value === '' ? undefined : selectedEvaluationCompleted.value === '1',
+      reliabilityTrusted:
+        selectedReliabilityTrusted.value === '' ? undefined : selectedReliabilityTrusted.value === '1',
     });
     posts.value = res.list;
     total.value = res.total;
@@ -299,15 +315,24 @@ const getPostTypeClass = (postType?: string) => {
   return postType === 'DATA_ANALYSIS' ? 'type-analysis' : 'type-topic';
 };
 
-const getReliabilityText = (status?: number) => {
-  if (status === 2) return '已认证';
-  if (status === 1) return '评选中';
+const REQUIRED_EVALUATIONS = 3;
+const RELIABILITY_PASS_SCORE = 70;
+
+const getReliabilityText = (post?: ForumPost) => {
+  const count = Number(post?.evaluationCount ?? 0);
+  const score = Number(post?.reliabilityScore ?? 0);
+  if (post?.reliabilityStatus === 2) return '已认证';
+  if (count >= REQUIRED_EVALUATIONS) return score >= RELIABILITY_PASS_SCORE ? '已认证' : '未通过认证';
+  if (count > 0) return `评估中 ${count}/${REQUIRED_EVALUATIONS}`;
   return '未评选';
 };
 
-const getReliabilityClass = (status?: number) => {
-  if (status === 2) return 'reliability-certified';
-  if (status === 1) return 'reliability-progress';
+const getReliabilityClass = (post?: ForumPost) => {
+  const count = Number(post?.evaluationCount ?? 0);
+  const score = Number(post?.reliabilityScore ?? 0);
+  if (post?.reliabilityStatus === 2) return 'reliability-certified';
+  if (count >= REQUIRED_EVALUATIONS && score < RELIABILITY_PASS_SCORE) return 'reliability-failed';
+  if (post?.reliabilityStatus === 1 || count > 0) return 'reliability-progress';
   return 'reliability-none';
 };
 
@@ -576,6 +601,10 @@ onMounted(() => {
   background: linear-gradient(135deg, #fdcb6e, #e17055);
 }
 
+.reliability-failed {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+}
+
 .reliability-certified {
   background: linear-gradient(135deg, #00b894, #0984e3);
 }
@@ -779,6 +808,147 @@ onMounted(() => {
   gap: 12px;
   padding: 20px 24px;
   border-top: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+/* 浅色主色调可读性覆盖 */
+.filter-btn {
+  background: #ffffff;
+  border-color: #dbe8f4;
+  color: #334155;
+
+  &:hover {
+    background: #f0f9ff;
+    border-color: #7dd3fc;
+    color: #0f172a;
+  }
+
+  &.active {
+    background: linear-gradient(135deg, #0284c7, #06b6d4);
+    border-color: rgba(2, 132, 199, 0.6);
+    color: #ffffff;
+  }
+}
+
+.search-input,
+.filter-select {
+  background: #ffffff;
+  border-color: #dbe8f4;
+  color: #0f172a;
+}
+
+.search-input::placeholder {
+  color: #94a3b8;
+}
+
+.filter-select {
+  color-scheme: light;
+}
+
+.section-title {
+  color: #0f172a;
+  border-left-color: #0284c7;
+}
+
+.post-card {
+  background: #ffffff;
+  border: 1px solid #dbe8f4;
+}
+
+.post-card:hover {
+  box-shadow: 0 10px 24px -12px rgba(2, 132, 199, 0.35);
+}
+
+.post-card.top-post {
+  background: linear-gradient(135deg, #f0f9ff, #f8fbff);
+  border-color: #bae6fd;
+}
+
+.post-title {
+  color: #0f172a;
+
+  &:hover {
+    color: #0369a1;
+  }
+}
+
+.post-content {
+  color: #475569;
+}
+
+.tag {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #0369a1;
+}
+
+.post-meta {
+  color: #334155;
+}
+
+.text-center {
+  color: #334155;
+}
+
+.dialog-content {
+  background: #ffffff;
+  border: 1px solid #dbe8f4;
+}
+
+.dialog-header {
+  border-bottom-color: #dbe8f4;
+
+  h3 {
+    color: #0f172a;
+  }
+}
+
+.close-btn {
+  color: #334155;
+  &:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+}
+
+.form-group {
+  label {
+    color: #334155;
+  }
+
+  input,
+  select,
+  textarea {
+    background: #ffffff;
+    border-color: #dbe8f4;
+    color: #0f172a;
+
+    &::placeholder {
+      color: #94a3b8;
+    }
+
+    &:focus {
+      border-color: #7dd3fc;
+      background: #ffffff;
+    }
+  }
+}
+
+.file-item {
+  border-color: #dbe8f4;
+  color: #1e293b;
+}
+
+.forum-list .post-meta .author,
+.forum-list .post-meta .time,
+.forum-list .post-meta .views,
+.forum-list .post-meta .likes,
+.forum-list .post-meta .comments,
+.forum-list .post-content {
+  color: #334155 !important;
+}
+
+.dialog-footer {
+  border-top-color: #dbe8f4;
 }
 
 // 响应式设计

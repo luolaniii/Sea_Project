@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
@@ -45,7 +46,8 @@ public class NdbcAutoSyncServiceImpl implements NdbcAutoSyncService {
 
     /** 支持的文件后缀 */
     private static final List<String> SUPPORTED_SUFFIXES = Arrays.asList(
-            "txt", "ocean", "spec", "cwind", "rain", "supl", "adcp"
+            "txt", "ocean", "cwind", "spec", "data_spec", "dart", "adcp",
+            "rain", "srad", "supl", "tide", "wlevel", "pwind", "swden"
     );
     /** 变量映射缓存TTL（毫秒） */
     private static final long VARIABLE_TYPE_CACHE_TTL_MS = 5 * 60 * 1000L;
@@ -115,6 +117,7 @@ public class NdbcAutoSyncServiceImpl implements NdbcAutoSyncService {
         if (baseUrl == null || baseUrl.trim().isEmpty()) {
             baseUrl = DEFAULT_BASE_URL;
         }
+        baseUrl = normalizeNdbcBaseUrl(baseUrl);
 
         // 获取要采集的文件后缀
         List<String> suffixes = parseSuffixes(dataSource.getFileSuffixes());
@@ -241,8 +244,10 @@ public class NdbcAutoSyncServiceImpl implements NdbcAutoSyncService {
 
     private FetchResult fetchNdbcFileWithMeta(String baseUrl, String stationId, String suffix) {
         long startNs = System.nanoTime();
-        String fileName = stationId + "." + suffix;
-        String url = baseUrl + "/" + fileName;
+        String sid = stationId == null ? "" : stationId.trim().toUpperCase(Locale.ROOT);
+        String suffixNorm = suffix == null ? "" : suffix.trim().replaceFirst("^\\.", "").toLowerCase(Locale.ROOT);
+        String fileName = sid + "." + suffixNorm;
+        String url = normalizeNdbcBaseUrl(baseUrl) + "/" + fileName;
 
         log.debug("获取NDBC文件: {}", url);
         String lastErrorType = null;
@@ -307,6 +312,7 @@ public class NdbcAutoSyncServiceImpl implements NdbcAutoSyncService {
         if (baseUrl == null || baseUrl.trim().isEmpty()) {
             baseUrl = DEFAULT_BASE_URL;
         }
+        baseUrl = normalizeNdbcBaseUrl(baseUrl);
 
         String stationId = dataSource.getStationId();
         if (stationId == null || stationId.trim().isEmpty()) {
@@ -416,8 +422,22 @@ public class NdbcAutoSyncServiceImpl implements NdbcAutoSyncService {
         }
         return Arrays.stream(fileSuffixes.split(","))
                 .map(String::trim)
+                .map(s -> s.replaceFirst("^\\.", ""))
+                .map(String::toLowerCase)
                 .filter(s -> !s.isEmpty())
+                .filter(SUPPORTED_SUFFIXES::contains)
                 .collect(Collectors.toList());
+    }
+
+    private String normalizeNdbcBaseUrl(String baseUrl) {
+        String value = StringUtils.hasText(baseUrl) ? baseUrl.trim() : DEFAULT_BASE_URL;
+        while (value.endsWith("/")) {
+            value = value.substring(0, value.length() - 1);
+        }
+        if (value.endsWith("/data")) {
+            return value + "/realtime2";
+        }
+        return value;
     }
 
     /**

@@ -29,8 +29,18 @@
         <select v-model="selectedReliabilityStatus" class="search-input" @change="handleSearch">
           <option value="">全部可靠性</option>
           <option value="0">未评选</option>
-          <option value="1">评选中</option>
+          <option value="1">评估中/未通过</option>
           <option value="2">已认证</option>
+        </select>
+        <select v-model="selectedEvaluationCompleted" class="search-input" @change="handleSearch">
+          <option value="">评估完成度</option>
+          <option value="1">已完成评估</option>
+          <option value="0">未完成评估</option>
+        </select>
+        <select v-model="selectedReliabilityTrusted" class="search-input" @change="handleSearch">
+          <option value="">可信结果</option>
+          <option value="1">可信</option>
+          <option value="0">不可信</option>
         </select>
         <input
           v-model="keyword"
@@ -62,6 +72,9 @@
           </span>
           <span :class="['status-badge', post.postType === 'DATA_ANALYSIS' ? 'status-analysis' : 'status-topic']">
             {{ post.postType === 'DATA_ANALYSIS' ? '数据分析' : '主题讨论' }}
+          </span>
+          <span v-if="post.postType === 'DATA_ANALYSIS'" :class="['status-badge', getReliabilityClass(post)]">
+            {{ getReliabilityText(post) }}
           </span>
           <h3 class="post-title" @click="goToDetail(post.id!)">{{ post.title }}</h3>
         </div>
@@ -118,7 +131,7 @@
       title="确认删除"
       @confirm="confirmDeletePost"
     >
-      <div style="padding: 20px 0; color: rgba(224, 242, 255, 0.9);">
+      <div style="padding: 20px 0; color: #334155;">
         <p style="font-size: 16px; margin: 0;">确定要删除这条帖子吗？删除后无法恢复，该帖子下的所有评论也将被删除。</p>
       </div>
     </Modal>
@@ -145,6 +158,8 @@ const total = ref(0);
 const selectedCategory = ref<string>('');
 const selectedPostType = ref<string>('');
 const selectedReliabilityStatus = ref<string>('');
+const selectedEvaluationCompleted = ref<string>('');
+const selectedReliabilityTrusted = ref<string>('');
 const keyword = ref('');
 const deleteModalVisible = ref(false);
 const deletingPostId = ref<number | null>(null);
@@ -156,6 +171,8 @@ const categories = [
   { label: '经验分享', value: 'SHARE' },
   { label: '新闻资讯', value: 'NEWS' },
 ];
+const REQUIRED_EVALUATIONS = 3;
+const RELIABILITY_PASS_SCORE = 70;
 
 const loadPosts = async () => {
   loading.value = true;
@@ -167,6 +184,10 @@ const loadPosts = async () => {
       keyword: keyword.value || undefined,
       postType: selectedPostType.value || undefined,
       reliabilityStatus: selectedReliabilityStatus.value === '' ? undefined : Number(selectedReliabilityStatus.value),
+      evaluationCompleted:
+        selectedEvaluationCompleted.value === '' ? undefined : selectedEvaluationCompleted.value === '1',
+      reliabilityTrusted:
+        selectedReliabilityTrusted.value === '' ? undefined : selectedReliabilityTrusted.value === '1',
     });
     posts.value = res.list;
     total.value = res.total;
@@ -258,6 +279,24 @@ const getStatusClass = (status?: number) => {
     default:
       return '';
   }
+};
+
+const getReliabilityText = (post?: ForumPost) => {
+  const count = Number(post?.evaluationCount ?? 0);
+  const score = Number(post?.reliabilityScore ?? 0);
+  if (post?.reliabilityStatus === 2) return '已认证';
+  if (count >= REQUIRED_EVALUATIONS) return score >= RELIABILITY_PASS_SCORE ? '已认证' : '未通过认证';
+  if (count > 0) return `评估中 ${count}/${REQUIRED_EVALUATIONS}`;
+  return '未评选';
+};
+
+const getReliabilityClass = (post?: ForumPost) => {
+  const count = Number(post?.evaluationCount ?? 0);
+  const score = Number(post?.reliabilityScore ?? 0);
+  if (post?.reliabilityStatus === 2) return 'status-certified';
+  if (count >= REQUIRED_EVALUATIONS && score < RELIABILITY_PASS_SCORE) return 'status-failed';
+  if (post?.reliabilityStatus === 1 || count > 0) return 'status-progress';
+  return 'status-none';
 };
 
 const handleEdit = (post: ForumPost) => {
@@ -442,6 +481,22 @@ onMounted(() => {
   &.status-analysis {
     background: linear-gradient(135deg, #00b894, #00cec9);
   }
+
+  &.status-none {
+    background: linear-gradient(135deg, #64748b, #334155);
+  }
+
+  &.status-progress {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+  }
+
+  &.status-failed {
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+  }
+
+  &.status-certified {
+    background: linear-gradient(135deg, #0284c7, #06b6d4);
+  }
 }
 
 .post-title {
@@ -536,6 +591,88 @@ onMounted(() => {
     margin: 16px 0;
     font-size: 16px;
   }
+}
+
+/* 浅色主色调可读性覆盖 */
+.filter-btn {
+  background: #ffffff;
+  border-color: #dbe8f4;
+  color: #334155;
+
+  &:hover {
+    background: #f0f9ff;
+    border-color: #7dd3fc;
+    color: #0f172a;
+  }
+
+  &.active {
+    background: linear-gradient(135deg, #0284c7, #06b6d4);
+    border-color: rgba(2, 132, 199, 0.6);
+    color: #ffffff;
+  }
+}
+
+.search-input {
+  background: #ffffff;
+  border-color: #dbe8f4;
+  color: #0f172a;
+
+  &::placeholder {
+    color: #94a3b8;
+  }
+
+  &:focus {
+    border-color: #7dd3fc;
+    background: #ffffff;
+  }
+}
+
+.post-card {
+  background: #ffffff;
+  border: 1px solid #dbe8f4;
+}
+
+.post-card:hover {
+  box-shadow: 0 10px 24px -12px rgba(2, 132, 199, 0.35);
+}
+
+.post-title {
+  color: #0f172a;
+
+  &:hover {
+    color: #0369a1;
+  }
+}
+
+.post-content {
+  color: #475569;
+}
+
+.tag {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #0369a1;
+}
+
+.post-meta {
+  color: #334155;
+}
+
+.post-actions {
+  border-top-color: #dbe8f4;
+}
+
+.text-center,
+.empty-state {
+  color: #334155;
+}
+
+.my-posts .post-meta .time,
+.my-posts .post-meta .views,
+.my-posts .post-meta .likes,
+.my-posts .post-meta .comments,
+.my-posts .post-content {
+  color: #334155 !important;
 }
 
 // 响应式设计

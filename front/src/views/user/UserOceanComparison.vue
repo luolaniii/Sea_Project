@@ -415,6 +415,124 @@ onMounted(() => {
 .confidence-low { color: #ff6b6b; }
 .degrade-reason { color: rgba(255, 200, 120, 0.85); }
 
+/* 浅色主色调可读性覆盖 */
+.card {
+  background: #ffffff;
+  border: 1px solid #dbe8f4;
+  color: #334155;
+}
+
+.card h1 {
+  color: #0f172a;
+}
+
+.card h3 {
+  color: #0f172a;
+}
+
+.card p {
+  color: #64748b;
+}
+
+.page-eyebrow {
+  color: rgba(2, 132, 199, 0.78);
+}
+
+.page-eyebrow .dash {
+  background: linear-gradient(90deg, transparent, #0284c7);
+}
+
+.multi-select select,
+.filter-col input {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #dbe8f4;
+}
+
+.filter-col label {
+  color: #475569;
+}
+
+.btn {
+  border-color: #dbe8f4;
+  background: #f8fbff;
+  color: #334155;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #0284c7, #06b6d4);
+  color: #ffffff;
+}
+
+.error {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #dc2626;
+}
+
+.stat-table th,
+.station-table th {
+  background: #f4f9ff;
+  color: #334155;
+}
+
+.stat-table th,
+.stat-table td,
+.station-table th,
+.station-table td {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.metric-name,
+.station-name b {
+  color: #0f172a;
+}
+
+.station-name small {
+  color: #64748b;
+}
+
+.geo {
+  color: #0369a1;
+}
+
+.na {
+  color: #94a3b8;
+}
+
+.no-anomaly {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.anomaly-list li {
+  background: #f8fbff;
+  border: 1px solid #dbe8f4;
+}
+
+.anomaly-title {
+  color: #0f172a;
+}
+
+.metric-tag {
+  color: #334155;
+  background: #e0f2fe;
+}
+
+.anomaly-desc {
+  color: #334155;
+}
+
+.anomaly-detail,
+.confidence-line {
+  color: #64748b;
+}
+
+.degrade-reason {
+  color: #b45309;
+}
+
 @media (max-width: 1024px) {
   .filters { grid-template-columns: 1fr; }
   .result-grid { grid-template-columns: 1fr; }

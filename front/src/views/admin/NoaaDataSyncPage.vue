@@ -3,7 +3,7 @@
     <PageHeader title="NOAA 数据同步">
       <template #extra>
         <button class="btn btn-default" @click="handleSyncAll" :disabled="syncingAll">
-          {{ syncingAll ? '同步中...' : '🔄 同步所有站点' }}
+          {{ syncingAll ? '同步中...' : '同步所有站点' }}
         </button>
       </template>
     </PageHeader>
@@ -17,14 +17,14 @@
             :class="{ active: activeMode === 'upload' }"
             @click="activeMode = 'upload'"
           >
-            📁 文件上传
+            文件上传
           </button>
           <button
             class="mode-btn"
             :class="{ active: activeMode === 'auto' }"
             @click="activeMode = 'auto'"
           >
-            🌐 HTTP自动采集
+            HTTP 自动采集
           </button>
         </div>
       </div>
@@ -95,9 +95,9 @@
             <div v-if="uploadResult.qualityStats" class="result-item">
               <span class="result-label">质量统计:</span>
               <span class="result-value">
-                <span class="quality-good">✔ {{ uploadResult.qualityStats.goodCount }}</span>
-                <span class="quality-questionable"> / ⚠ {{ uploadResult.qualityStats.questionableCount }}</span>
-                <span class="quality-bad"> / ✘ {{ uploadResult.qualityStats.badCount }}</span>
+                <span class="quality-good">优 {{ uploadResult.qualityStats.goodCount }}</span>
+                <span class="quality-questionable"> / 可疑 {{ uploadResult.qualityStats.questionableCount }}</span>
+                <span class="quality-bad"> / 异常 {{ uploadResult.qualityStats.badCount }}</span>
               </span>
             </div>
           </div>
@@ -108,22 +108,22 @@
       <template v-if="activeMode === 'auto'">
         <!-- Module A：扫描 NDBC 所有站点 -->
         <div class="card">
-          <h3 class="card-title">🔍 扫描 NDBC 所有站点</h3>
+          <h3 class="card-title">扫描 NDBC 所有站点</h3>
           <div style="display: flex; gap: 12px; margin-bottom: 12px;">
             <button class="btn btn-primary" :disabled="discovering" @click="handleDiscover">
-              {{ discovering ? '扫描中...' : '🔍 扫描 NDBC realtime2 目录' }}
+              {{ discovering ? '扫描中...' : '扫描 NDBC realtime2 目录' }}
             </button>
             <button v-if="discoveredStations.length > 0" class="btn btn-default" :disabled="batchCreating" @click="handleBatchCreate">
-              {{ batchCreating ? '创建中...' : '＋ 批量添加选中站点' }}
+              {{ batchCreating ? '创建中...' : '批量添加选中站点' }}
             </button>
             <span v-if="discoveredStations.length > 0" class="discover-count">共 {{ discoveredStations.length }} 个站点，{{ discoveredStations.filter(s => s.hasWaveData).length }} 个有波浪数据，已选 {{ selectedDiscover.length }}</span>
           </div>
           <!-- 批量进度面板 -->
           <div v-if="batchProgress.total > 0" class="batch-progress">
             <div class="bp-header">
-              <span class="bp-title">📊 批量进度</span>
+              <span class="bp-title">批量进度</span>
               <span class="bp-status" :class="{ active: batchCreating, paused: batchPaused }">
-                {{ batchCreating ? '⚙️ 处理中…' : batchPaused ? '⏸ 已暂停' : batchProgress.finished ? '✅ 已完成' : '⏯ 等待恢复' }}
+                {{ batchCreating ? '处理中' : batchPaused ? '已暂停' : batchProgress.finished ? '已完成' : '等待恢复' }}
               </span>
             </div>
             <div class="bp-bar-wrap">
@@ -131,28 +131,28 @@
               <span class="bp-count">{{ batchProgress.done }} / {{ batchProgress.total }}</span>
             </div>
             <div class="bp-stats">
-              <span class="bp-stat ok">✅ 创建 {{ batchProgress.created }}</span>
-              <span class="bp-stat skip">↪ 跳过 {{ batchProgress.skipped }}</span>
-              <span class="bp-stat chart">📈 图表 {{ batchProgress.charts }}</span>
-              <span class="bp-stat scene">🌊 场景 {{ batchProgress.scenes }}</span>
-              <span v-if="batchProgress.failed.length" class="bp-stat fail">❌ 失败 {{ batchProgress.failed.length }}</span>
+              <span class="bp-stat ok">创建 {{ batchProgress.created }}</span>
+              <span class="bp-stat skip">跳过 {{ batchProgress.skipped }}</span>
+              <span class="bp-stat chart">图表 {{ batchProgress.charts }}</span>
+              <span class="bp-stat scene">场景 {{ batchProgress.scenes }}</span>
+              <span v-if="batchProgress.failed.length" class="bp-stat fail">失败 {{ batchProgress.failed.length }}</span>
               <span v-if="batchProgress.current" class="bp-current">当前：{{ batchProgress.current }}</span>
             </div>
             <div class="bp-actions">
-              <button v-if="batchCreating" class="btn btn-default" @click="handleBatchPause">⏸ 暂停</button>
+              <button v-if="batchCreating" class="btn btn-default" @click="handleBatchPause">暂停</button>
               <button
                 v-if="!batchCreating && batchProgress.remaining.length > 0"
                 class="btn btn-primary"
                 @click="handleBatchResume"
               >
-                ▶️ 继续批量 ({{ batchProgress.remaining.length }} 剩余)
+                继续批量 ({{ batchProgress.remaining.length }} 剩余)
               </button>
               <button
                 v-if="!batchCreating && (batchProgress.finished || batchProgress.remaining.length === 0)"
                 class="btn btn-default"
                 @click="handleBatchClear"
               >
-                🗑 清空记录
+                清空记录
               </button>
             </div>
             <details v-if="batchProgress.failed.length" class="bp-failed">
@@ -180,7 +180,7 @@
                   <td><input type="checkbox" :value="s.stationId" v-model="selectedDiscover" /></td>
                   <td>{{ s.stationId }}</td>
                   <td>
-                    <span v-if="s.hasWaveData" class="wave-yes">✅</span>
+                    <span v-if="s.hasWaveData" class="wave-yes">有</span>
                     <span v-else class="wave-no">—</span>
                   </td>
                   <td class="suffixes">{{ s.availableSuffixes.join(', ') }}</td>
@@ -202,10 +202,10 @@
                 <div class="station-meta">
                   <span class="station-id">{{ station.stationId || '未配置站点ID' }}</span>
                   <span v-if="station.longitude && station.latitude" class="station-coords">
-                    📍 {{ station.longitude?.toFixed(4) }}, {{ station.latitude?.toFixed(4) }}
+                    坐标 {{ station.longitude?.toFixed(4) }}, {{ station.latitude?.toFixed(4) }}
                   </span>
                   <span v-if="station.fileSuffixes" class="station-suffixes">
-                    📁 {{ station.fileSuffixes }}
+                    文件 {{ station.fileSuffixes }}
                   </span>
                 </div>
                 <div class="station-status">
@@ -269,16 +269,16 @@
               <div v-for="file in syncResult.fileResults" :key="file.suffix" class="file-result-item">
                 <span class="file-suffix">.{{ file.suffix }}.txt</span>
                 <span :class="['file-status', file.status]">
-                  {{ file.status === 'success' ? `✔ ${file.saved}条` : file.status }}
+                  {{ file.status === 'success' ? `成功 ${file.saved} 条` : file.status }}
                 </span>
                 <span class="file-metrics">
                   {{ file.fetchAttempts || 0 }}次 / {{ file.fetchCostMs || 0 }}ms / {{ file.costMs || 0 }}ms
                 </span>
                 <span v-if="file.errorType" class="file-error">{{ file.errorType }}</span>
                 <span v-if="file.qualityStats" class="file-quality">
-                  <span class="quality-good">✔{{ file.qualityStats.goodCount }}</span>
-                  <span class="quality-questionable">⚠{{ file.qualityStats.questionableCount }}</span>
-                  <span class="quality-bad">✘{{ file.qualityStats.badCount }}</span>
+                  <span class="quality-good">优{{ file.qualityStats.goodCount }}</span>
+                  <span class="quality-questionable">可疑{{ file.qualityStats.questionableCount }}</span>
+                  <span class="quality-bad">异常{{ file.qualityStats.badCount }}</span>
                 </span>
               </div>
             </div>
@@ -1311,6 +1311,270 @@ onMounted(() => {
   summary { cursor: pointer; padding: 4px 0; }
   ul { padding-left: 22px; margin: 6px 0 0; }
   li { margin: 2px 0; }
+}
+
+/* 浅色主色覆盖 */
+.card {
+  background: #ffffff;
+  border: 1px solid #dbe8f4;
+  box-shadow: 0 12px 26px -20px rgba(15, 23, 42, 0.35);
+}
+
+.card-title {
+  color: #0f172a;
+  border-bottom-color: #dbe8f4;
+}
+
+.mode-btn {
+  background: #f8fbff;
+  border-color: #dbe8f4;
+  color: #475569;
+
+  &:hover {
+    background: #f0f9ff;
+    border-color: #7dd3fc;
+    box-shadow: none;
+  }
+
+  &.active {
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.18), rgba(6, 182, 212, 0.14));
+    border-color: rgba(2, 132, 199, 0.35);
+    color: #0f172a;
+    box-shadow: 0 8px 16px -12px rgba(2, 132, 199, 0.5);
+  }
+}
+
+.form-item {
+  label {
+    color: #334155;
+  }
+
+  input,
+  select {
+    background: #ffffff;
+    border: 1px solid #dbe8f4;
+    color: #334155;
+
+    &:focus {
+      border-color: rgba(2, 132, 199, 0.55);
+      box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.12);
+    }
+
+    &::placeholder {
+      color: #94a3b8;
+    }
+  }
+
+  select {
+    color-scheme: light;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364758b' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+
+    option {
+      background: #ffffff !important;
+      color: #0f172a !important;
+    }
+  }
+
+  small {
+    color: #64748b;
+  }
+}
+
+.result-item,
+.station-item,
+.preview-file,
+.file-result-item {
+  background: #f8fbff;
+  border-color: #dbe8f4;
+}
+
+.station-item:hover {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+
+.station-name {
+  color: #0f172a;
+}
+
+.station-meta,
+.last-sync,
+.empty-tip,
+.discover-count {
+  color: #64748b;
+}
+
+.station-meta .station-id,
+.file-result-item .file-suffix,
+.preview-file-header .file-suffix,
+.result-value,
+.bp-title {
+  color: #0284c7;
+}
+
+.discover-table {
+  border-color: #dbe8f4;
+
+  table {
+    color: #334155;
+  }
+
+  th, td {
+    border-bottom-color: #e2e8f0;
+  }
+
+  th {
+    background: #f4f9ff;
+  }
+
+  .wave-no {
+    color: #94a3b8;
+  }
+
+  .suffixes {
+    color: #64748b;
+  }
+}
+
+.batch-progress {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.08), rgba(6, 182, 212, 0.07));
+  border-color: rgba(2, 132, 199, 0.24);
+}
+
+.bp-bar-wrap {
+  background: rgba(2, 132, 199, 0.12);
+}
+
+.bp-bar {
+  background: linear-gradient(90deg, #0284c7, #06b6d4);
+  box-shadow: 0 0 8px rgba(2, 132, 199, 0.35);
+}
+
+.bp-stat {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* NOAA 同步页面：进一步提高文字对比度 */
+.noaa-data-sync-page {
+  color: #334155;
+}
+
+.noaa-data-sync-page .mode-btn,
+.noaa-data-sync-page .btn.btn-default,
+.noaa-data-sync-page .result-label,
+.noaa-data-sync-page .station-meta,
+.noaa-data-sync-page .last-sync,
+.noaa-data-sync-page .discover-count,
+.noaa-data-sync-page .empty-tip,
+.noaa-data-sync-page .file-metrics,
+.noaa-data-sync-page .preview-fetch-metrics,
+.noaa-data-sync-page .preview-variables,
+.noaa-data-sync-page .bp-current,
+.noaa-data-sync-page .bp-failed {
+  color: #334155;
+}
+
+.noaa-data-sync-page .bp-status {
+  color: #334155;
+  background: #e2e8f0;
+}
+
+.noaa-data-sync-page .bp-status.active {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.noaa-data-sync-page .bp-status.paused {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.noaa-data-sync-page .station-meta .station-id,
+.noaa-data-sync-page .preview-file-header .file-suffix,
+.noaa-data-sync-page .file-result-item .file-suffix,
+.noaa-data-sync-page .quality-good {
+  color: #0369a1;
+}
+
+.noaa-data-sync-page .card-title,
+.noaa-data-sync-page .station-name,
+.noaa-data-sync-page .preview-file-header .file-status,
+.noaa-data-sync-page .discover-table th,
+.noaa-data-sync-page .discover-table td,
+.noaa-data-sync-page .file-status,
+.noaa-data-sync-page .result-value {
+  color: #0f172a;
+}
+
+.noaa-data-sync-page .discover-table table,
+.noaa-data-sync-page .station-meta .station-coords,
+.noaa-data-sync-page .station-meta .station-suffixes,
+.noaa-data-sync-page .preview-variables,
+.noaa-data-sync-page .preview-fetch-metrics,
+.noaa-data-sync-page .file-metrics,
+.noaa-data-sync-page .empty-tip,
+.noaa-data-sync-page .discover-count,
+.noaa-data-sync-page .last-sync,
+.noaa-data-sync-page .bp-stat {
+  color: #475569;
+}
+
+.noaa-data-sync-page .quality-questionable {
+  color: #b45309;
+}
+
+.noaa-data-sync-page .quality-bad,
+.noaa-data-sync-page .preview-error,
+.noaa-data-sync-page .file-error {
+  color: #dc2626;
+}
+
+.noaa-data-sync-page .discover-table .wave-no,
+.noaa-data-sync-page .preview-file-header .file-status.unavailable,
+.noaa-data-sync-page .bp-stat.skip {
+  color: #64748b;
+}
+
+.noaa-data-sync-page .discover-table .wave-yes {
+  color: #166534;
+  font-weight: 700;
+}
+
+/* 修复部分浏览器/样式叠加导致的下拉框重复箭头 */
+.noaa-data-sync-page select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-color: #ffffff !important;
+  background-image: linear-gradient(45deg, transparent 50%, #475569 50%),
+    linear-gradient(135deg, #475569 50%, transparent 50%) !important;
+  background-position: calc(100% - 17px) 50%, calc(100% - 11px) 50% !important;
+  background-size: 6px 6px, 6px 6px !important;
+  background-repeat: no-repeat !important;
+  padding-right: 34px !important;
+  color: #0f172a !important;
+  border-color: #dbe8f4 !important;
+}
+
+/* 提升浅色主题下 NOAA 页面文字可读性 */
+.noaa-data-sync-page .card-title,
+.noaa-data-sync-page .station-name,
+.noaa-data-sync-page .bp-title,
+.noaa-data-sync-page .preview-file-name {
+  color: #0f172a !important;
+}
+
+.noaa-data-sync-page .station-meta,
+.noaa-data-sync-page .last-sync,
+.noaa-data-sync-page .empty-tip,
+.noaa-data-sync-page .discover-count,
+.noaa-data-sync-page .bp-count,
+.noaa-data-sync-page .bp-current,
+.noaa-data-sync-page .preview-file-time,
+.noaa-data-sync-page .preview-file-size,
+.noaa-data-sync-page .result-label {
+  color: #334155 !important;
 }
 
 // 响应式设计

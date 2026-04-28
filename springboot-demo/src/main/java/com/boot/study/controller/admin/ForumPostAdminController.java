@@ -42,7 +42,9 @@ public class ForumPostAdminController extends BaseController<ForumPostService, F
                 req.getKeyword(),
                 req.getStatus(),
                 req.getPostType(),
-                req.getReliabilityStatus()
+                req.getReliabilityStatus(),
+                req.getEvaluationCompleted(),
+                req.getReliabilityTrusted()
         );
         return Result.success(pageBean);
     }

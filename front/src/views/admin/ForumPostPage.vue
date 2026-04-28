@@ -16,6 +16,22 @@
             <option value="SHARE">经验分享</option>
             <option value="NEWS">新闻资讯</option>
           </select>
+          <select v-model="filterReliabilityStatus" class="filter-select" @change="loadData">
+            <option value="">全部评估状态</option>
+            <option :value="0">未评选</option>
+            <option :value="1">评估中/未通过</option>
+            <option :value="2">已认证</option>
+          </select>
+          <select v-model="filterEvaluationCompleted" class="filter-select" @change="loadData">
+            <option value="">评估完成度</option>
+            <option value="1">已完成评估</option>
+            <option value="0">未完成评估</option>
+          </select>
+          <select v-model="filterReliabilityTrusted" class="filter-select" @change="loadData">
+            <option value="">可信结果</option>
+            <option value="1">可信</option>
+            <option value="0">不可信</option>
+          </select>
           <input
             v-model="keyword"
             type="text"
@@ -67,6 +83,17 @@
           </span>
         </template>
 
+        <template #reliability="{ row }">
+          <div class="reliability-cell">
+            <span :class="['reliability-badge', getReliabilityClass(row)]">
+              {{ getReliabilityText(row) }}
+            </span>
+            <span v-if="row.postType === 'DATA_ANALYSIS'" class="reliability-meta">
+              {{ row.evaluationCount || 0 }}/3 · {{ row.reliabilityScore || 0 }}分
+            </span>
+          </div>
+        </template>
+
         <!-- 标题列 - 可点击 -->
         <template #title="{ row }">
           <span class="title-link" @click="handleTitleClick(row)">
@@ -89,7 +116,7 @@
       title="确认删除"
       @confirm="confirmDeletePost"
     >
-      <div style="padding: 20px 0; color: rgba(224, 242, 255, 0.9);">
+      <div style="padding: 20px 0; color: #334155;">
         <p style="font-size: 16px; margin: 0;">确定要删除这条帖子吗？删除后无法恢复，该帖子下的所有评论也将被删除。</p>
       </div>
     </Modal>
@@ -118,11 +145,11 @@
           </div>
           <h2 class="detail-title">{{ postDetail.title }}</h2>
           <div class="detail-meta">
-            <span>👤 {{ postDetail.authorName }}</span>
-            <span>📅 {{ postDetail.createdTime }}</span>
-            <span>👁️ {{ postDetail.viewCount || 0 }} 浏览</span>
-            <span>❤️ {{ postDetail.likeCount || 0 }} 点赞</span>
-            <span>💬 {{ postDetail.commentCount || 0 }} 评论</span>
+            <span>作者 {{ postDetail.authorName }}</span>
+            <span>发布时间 {{ postDetail.createdTime }}</span>
+            <span>浏览 {{ postDetail.viewCount || 0 }}</span>
+            <span>点赞 {{ postDetail.likeCount || 0 }}</span>
+            <span>评论 {{ postDetail.commentCount || 0 }}</span>
           </div>
         </div>
 
@@ -144,7 +171,7 @@
               class="comment-item"
             >
               <div class="comment-header">
-                <span class="comment-author">👤 {{ comment.userName }}</span>
+                <span class="comment-author">{{ comment.userName }}</span>
                 <span class="comment-time">{{ formatTime(comment.createdTime) }}</span>
               </div>
               <div class="comment-content">
@@ -154,7 +181,7 @@
                 {{ comment.content }}
               </div>
               <div class="comment-meta">
-                <span>❤️ {{ comment.likeCount || 0 }}</span>
+                <span>点赞 {{ comment.likeCount || 0 }}</span>
               </div>
               <!-- 子评论 -->
               <div v-if="comment.children && comment.children.length > 0" class="comment-children">
@@ -164,7 +191,7 @@
                   class="comment-item is-reply"
                 >
                   <div class="comment-header">
-                    <span class="comment-author">👤 {{ child.userName }}</span>
+                    <span class="comment-author">{{ child.userName }}</span>
                     <span class="comment-time">{{ formatTime(child.createdTime) }}</span>
                   </div>
                   <div class="comment-content">
@@ -174,7 +201,7 @@
                     {{ child.content }}
                   </div>
                   <div class="comment-meta">
-                    <span>❤️ {{ child.likeCount || 0 }}</span>
+                    <span>点赞 {{ child.likeCount || 0 }}</span>
                   </div>
                 </div>
               </div>
@@ -232,6 +259,11 @@ const columns = [
     title: '状态',
     style: { width: '90px', textAlign: 'center' }
   },
+  {
+    key: 'reliability',
+    title: '专家评估',
+    style: { width: '130px', textAlign: 'center' }
+  },
   { key: 'viewCount', title: '浏览量', style: { width: '90px', textAlign: 'center' } },
   { key: 'likeCount', title: '点赞数', style: { width: '90px', textAlign: 'center' } },
   { key: 'commentCount', title: '评论数', style: { width: '90px', textAlign: 'center' } },
@@ -249,6 +281,9 @@ const pageSize = ref(10);
 const total = ref(0);
 const filterStatus = ref<number | ''>('');
 const filterCategory = ref<string>('');
+const filterReliabilityStatus = ref<number | ''>('');
+const filterEvaluationCompleted = ref<string>('');
+const filterReliabilityTrusted = ref<string>('');
 const keyword = ref('');
 const deleteModalVisible = ref(false);
 const deletingPostId = ref<string | null>(null);
@@ -256,6 +291,8 @@ const detailModalVisible = ref(false);
 const postDetail = ref<ForumPost | null>(null);
 const comments = ref<ForumComment[]>([]);
 const detailLoading = ref(false);
+const REQUIRED_EVALUATIONS = 3;
+const RELIABILITY_PASS_SCORE = 70;
 
 const loadData = async () => {
   loading.value = true;
@@ -265,6 +302,11 @@ const loadData = async () => {
       pageSize: pageSize.value,
       status: filterStatus.value === '' ? undefined : filterStatus.value,
       category: filterCategory.value || undefined,
+      reliabilityStatus: filterReliabilityStatus.value === '' ? undefined : filterReliabilityStatus.value,
+      evaluationCompleted:
+        filterEvaluationCompleted.value === '' ? undefined : filterEvaluationCompleted.value === '1',
+      reliabilityTrusted:
+        filterReliabilityTrusted.value === '' ? undefined : filterReliabilityTrusted.value === '1',
       keyword: keyword.value || undefined,
     });
     tableData.value = res.list;
@@ -305,6 +347,26 @@ const getStatusClass = (status: number) => {
     2: 'closed',
   };
   return map[status] || '';
+};
+
+const getReliabilityText = (post?: ForumPost) => {
+  if (post?.postType !== 'DATA_ANALYSIS') return '不适用';
+  const count = Number(post?.evaluationCount ?? 0);
+  const score = Number(post?.reliabilityScore ?? 0);
+  if (post?.reliabilityStatus === 2) return '已认证';
+  if (count >= REQUIRED_EVALUATIONS) return score >= RELIABILITY_PASS_SCORE ? '已认证' : '未通过';
+  if (count > 0) return `评估中 ${count}/${REQUIRED_EVALUATIONS}`;
+  return '未评选';
+};
+
+const getReliabilityClass = (post?: ForumPost) => {
+  if (post?.postType !== 'DATA_ANALYSIS') return 'none';
+  const count = Number(post?.evaluationCount ?? 0);
+  const score = Number(post?.reliabilityScore ?? 0);
+  if (post?.reliabilityStatus === 2) return 'certified';
+  if (count >= REQUIRED_EVALUATIONS && score < RELIABILITY_PASS_SCORE) return 'failed';
+  if (post?.reliabilityStatus === 1 || count > 0) return 'progress';
+  return 'none';
 };
 
 const handleToggleTop = async (row: ForumPost, event: Event) => {
@@ -594,6 +656,54 @@ onMounted(() => {
   }
 }
 
+.reliability-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.reliability-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 62px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+
+  &.none {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #dbe8f4;
+  }
+
+  &.progress {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+  }
+
+  &.failed {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  &.certified {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+  }
+}
+
+.reliability-meta {
+  color: #475569;
+  font-size: 11px;
+}
+
 // 标题链接样式
 .title-link {
   color: rgba(102, 126, 234, 0.9);
@@ -625,9 +735,9 @@ onMounted(() => {
           }
 
           // 数字列样式（浏览量、点赞数、评论数）
-          &:nth-child(8),
           &:nth-child(9),
-          &:nth-child(10) {
+          &:nth-child(10),
+          &:nth-child(11) {
             font-weight: 500;
             color: rgba(102, 126, 234, 0.9);
             font-family: 'Courier New', monospace;
@@ -875,6 +985,136 @@ onMounted(() => {
   .modal-container {
     max-width: 900px;
   }
+}
+
+/* 浅色主色覆盖 */
+.filter-select,
+.search-input {
+  background: #ffffff;
+  border: 1px solid #dbe8f4;
+  color: #334155;
+
+  &:focus {
+    border-color: rgba(2, 132, 199, 0.55);
+    box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.12);
+  }
+
+  &::placeholder {
+    color: #94a3b8;
+  }
+}
+
+.filter-select {
+  appearance: menulist !important;
+  -webkit-appearance: menulist !important;
+  -moz-appearance: menulist !important;
+  background-image: none !important;
+  padding-right: 12px !important;
+  color-scheme: light;
+
+  option {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  option:checked {
+    background: #e0f2fe !important;
+    color: #0c4a6e !important;
+  }
+}
+
+.switch {
+  input {
+    &:checked + .slider {
+      background: linear-gradient(135deg, #0284c7, #06b6d4);
+      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
+    }
+
+    &:focus + .slider {
+      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.16);
+    }
+  }
+
+  .slider {
+    background: #e2e8f0;
+    border: 1px solid #cbd5e1;
+  }
+}
+
+.title-link {
+  color: #0284c7;
+  &:hover { color: #0369a1; }
+}
+
+:deep(.data-table .table-container table tbody td:nth-child(2)) {
+  color: #0f172a;
+}
+
+:deep(.data-table .table-container table tbody td:nth-child(9)),
+:deep(.data-table .table-container table tbody td:nth-child(10)),
+:deep(.data-table .table-container table tbody td:nth-child(11)) {
+  color: #0284c7;
+}
+
+.detail-loading {
+  color: #334155;
+  .loading-spinner {
+    border: 3px solid rgba(2, 132, 199, 0.2);
+    border-top-color: #0284c7;
+  }
+}
+
+.post-detail-content {
+  &::-webkit-scrollbar-track { background: #eff6ff; }
+  &::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.45); }
+}
+
+.detail-header {
+  border-bottom: 1px solid #dbe8f4;
+  .detail-title { color: #0f172a; }
+  .detail-meta { color: #334155; }
+}
+
+.detail-body .detail-content-text {
+  color: #334155;
+  code {
+    background: #e0f2fe;
+    color: #0c4a6e;
+  }
+}
+
+.detail-comments {
+  .comments-title {
+    color: #0f172a;
+    border-bottom: 1px solid #dbe8f4;
+  }
+  .no-comments { color: #475569; }
+}
+
+.detail-comments .comment-item {
+  background: #f8fbff;
+  border: 1px solid #dbe8f4;
+
+  &:hover {
+    border-color: #bae6fd;
+    background: #f0f9ff;
+  }
+
+  &.is-reply {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+  }
+
+  .comment-header .comment-author { color: #0369a1; }
+  .comment-header .comment-time { color: #475569; }
+
+  .comment-content {
+    color: #334155;
+    .reply-to { color: #0284c7; }
+  }
+
+  .comment-meta { color: #334155; }
+  .comment-children { border-top: 1px solid #dbe8f4; }
 }
 </style>
 

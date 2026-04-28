@@ -97,6 +97,28 @@ export const useAuthStore = defineStore('auth', () => {
    */
   const isAdmin = computed(() => userInfo.value?.role?.toUpperCase() === 'ADMIN');
 
+  /**
+   * 更新当前用户的头像 URL（同步更新 localStorage 持久化）
+   */
+  const updateAvatar = (avatarUrl: string) => {
+    if (!userInfo.value) return;
+    userInfo.value = { ...userInfo.value, avatar: avatarUrl };
+    localStorage.setItem('userInfo', JSON.stringify(userInfo.value));
+  };
+
+  /**
+   * 用最新的服务器数据刷新用户资料（不更换 token）
+   */
+  const refreshUser = (info: Partial<UserInfo>) => {
+    if (!userInfo.value) return;
+    userInfo.value = {
+      ...userInfo.value,
+      ...info,
+      token: userInfo.value.token, // token 始终以本地存储为准
+    } as UserInfo;
+    localStorage.setItem('userInfo', JSON.stringify(userInfo.value));
+  };
+
   // 应用启动时初始化认证状态
   initAuth();
 
@@ -109,6 +131,8 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     isLoggedIn,
     isAdmin,
+    updateAvatar,
+    refreshUser,
   };
 });
 

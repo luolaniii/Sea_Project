@@ -143,6 +143,13 @@ const PATHS: Record<string, () => any> = {
   plus: () => h('path', { d: 'M12 5v14M5 12h14' }),
   // 关闭
   close: () => h('path', { d: 'M18 6L6 18M6 6l12 12' }),
+  // 上传
+  upload: () =>
+    h('g', null, [
+      h('path', { d: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4' }),
+      h('path', { d: 'M17 8l-5-5-5 5' }),
+      h('path', { d: 'M12 3v12' }),
+    ]),
   // 箭头
   arrowRight: () => h('path', { d: 'M5 12h14M12 5l7 7-7 7' }),
   arrowUp: () => h('path', { d: 'M12 19V5M5 12l7-7 7 7' }),

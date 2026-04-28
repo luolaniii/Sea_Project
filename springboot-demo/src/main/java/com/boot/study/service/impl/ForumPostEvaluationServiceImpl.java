@@ -9,6 +9,7 @@ import com.boot.study.enums.ResultEnum;
 import com.boot.study.exception.ServiceException;
 import com.boot.study.service.ForumPostEvaluationService;
 import com.boot.study.service.ForumPostService;
+import com.boot.study.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +26,11 @@ import java.util.List;
 public class ForumPostEvaluationServiceImpl extends BaseServiceImpl<ForumPostEvaluationMapper, ForumPostEvaluation>
         implements ForumPostEvaluationService {
 
+    private static final int REQUIRED_EXPERT_EVALUATIONS = 3;
+    private static final BigDecimal RELIABILITY_PASS_SCORE = new BigDecimal("70");
+
     private final ForumPostService forumPostService;
+    private final WalletService walletService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -74,6 +79,15 @@ public class ForumPostEvaluationServiceImpl extends BaseServiceImpl<ForumPostEva
         }
 
         refreshPostReliability(evaluation.getPostId());
+
+        // 评审奖励 hook：按当前评估人累计有效评估数发放徽章 + 奖励币
+        Long evaluatorId = evaluation.getEvaluatorId();
+        if (evaluatorId != null) {
+            long count = count(new LambdaQueryWrapper<ForumPostEvaluation>()
+                    .eq(ForumPostEvaluation::getEvaluatorId, evaluatorId)
+                    .eq(ForumPostEvaluation::getStatus, 1));
+            walletService.awardForEvaluation(evaluatorId, count);
+        }
         return evaluation;
     }
 
@@ -115,7 +129,8 @@ public class ForumPostEvaluationServiceImpl extends BaseServiceImpl<ForumPostEva
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal avg = sum.divide(new BigDecimal(count), 2, RoundingMode.HALF_UP);
             post.setReliabilityScore(avg);
-            post.setReliabilityStatus(count >= 3 && avg.compareTo(new BigDecimal("70")) >= 0 ? 2 : 1);
+            // 评估结束标准：至少3名专家提交有效评估；结束后均分>=70才判定为可信/已认证。
+            post.setReliabilityStatus(count >= REQUIRED_EXPERT_EVALUATIONS && avg.compareTo(RELIABILITY_PASS_SCORE) >= 0 ? 2 : 1);
         }
         forumPostService.updateById(post);
     }

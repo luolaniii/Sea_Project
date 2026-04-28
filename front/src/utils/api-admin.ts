@@ -100,7 +100,9 @@ export const dataSourceApi = {
     createdScenes: number;
     typeCodes: string[];
   }> => {
-    return http.post(`/admin/data-source/${toPathId(id)}/auto-generate`);
+    return http.post(`/admin/data-source/${toPathId(id)}/auto-generate`, undefined, {
+      timeout: 180000,
+    });
   },
   /**
    * 扫描 NDBC 目录发现所有站点（Module A）
@@ -110,7 +112,9 @@ export const dataSourceApi = {
     availableSuffixes: string[];
     hasWaveData: boolean;
   }>> => {
-    return http.get('/admin/noaa/discover-stations');
+    return http.get('/admin/noaa/discover-stations', {
+      timeout: 120000,
+    });
   },
   /**
    * 抓取某站点元数据（Module B）
@@ -124,7 +128,9 @@ export const dataSourceApi = {
     owner?: string;
     description?: string;
   }> => {
-    return http.get(`/admin/noaa/station-meta?stationId=${encodeURIComponent(stationId)}`);
+    return http.get(`/admin/noaa/station-meta?stationId=${encodeURIComponent(stationId)}`, {
+      timeout: 120000,
+    });
   },
   /**
    * 批量创建 NDBC 数据源（Module A）
@@ -143,6 +149,9 @@ export const dataSourceApi = {
       stationIds,
       autoGenerate: options?.autoGenerate ?? true,
       syncData: options?.syncData ?? true,
+    }, {
+      // 批量创建+自动生成+同步属于长耗时流程，避免默认30秒超时
+      timeout: 180000,
     });
   },
 };
@@ -452,6 +461,11 @@ export interface ForumPost {
   authorId?: string | number;
   authorName?: string;
   category?: string; // GENERAL-普通讨论, QUESTION-问题求助, SHARE-经验分享, NEWS-新闻资讯
+  postType?: string; // TOPIC_DISCUSSION-主题讨论, DATA_ANALYSIS-数据分析
+  analysisTarget?: string;
+  reliabilityStatus?: number; // 0-未评选, 1-评估中/未通过, 2-已认证
+  reliabilityScore?: number;
+  evaluationCount?: number;
   tags?: string; // JSON数组格式
   viewCount?: number;
   likeCount?: number;
@@ -560,7 +574,9 @@ export const noaaDataUploadApi = {
     formData.append('file', options.file);
 
     // 让浏览器自动设置 multipart/form-data 边界
-    return http.post('/admin/noaa/upload-ndbc-text', formData);
+    return http.post('/admin/noaa/upload-ndbc-text', formData, {
+      timeout: 120000,
+    });
   },
 };
 
@@ -619,7 +635,9 @@ export const noaaAutoSyncApi = {
    * 手动触发单个站点同步
    */
   syncStation: (dataSourceId: string | number): Promise<NoaaSyncResult> => {
-    return http.post(`/admin/noaa/sync/${toPathId(dataSourceId)}`);
+    return http.post(`/admin/noaa/sync/${toPathId(dataSourceId)}`, undefined, {
+      timeout: 120000,
+    });
   },
 
   /**
@@ -632,7 +650,9 @@ export const noaaAutoSyncApi = {
     details: NoaaSyncResult[];
     syncTime: string;
   }> => {
-    return http.post('/admin/noaa/sync-all');
+    return http.post('/admin/noaa/sync-all', undefined, {
+      timeout: 300000,
+    });
   },
 
   /**
@@ -651,14 +671,18 @@ export const noaaAutoSyncApi = {
       variables?: string[];
     }>;
   }> => {
-    return http.get(`/admin/noaa/preview/${toPathId(dataSourceId)}`);
+    return http.get(`/admin/noaa/preview/${toPathId(dataSourceId)}`, {
+      timeout: 120000,
+    });
   },
 
   /**
    * 查询站点可用的文件类型
    */
   getAvailableFileSuffixes: (stationId: string): Promise<string[]> => {
-    return http.get(`/admin/noaa/available-files/${stationId}`);
+    return http.get(`/admin/noaa/available-files/${stationId}`, {
+      timeout: 60000,
+    });
   },
 
   /**

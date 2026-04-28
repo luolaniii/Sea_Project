@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -25,7 +26,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.xml.parsers.DocumentBuilderFactory;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 /**
  * NOAA数据同步管理控制器（文件上传 + HTTP自动采集）
@@ -417,53 +421,52 @@ public class NoaaDataSyncController {
     // ==================== NDBC 自动发现（Module A + B） ====================
 
     /**
-     * 扫描 NDBC realtime2 目录，发现所有站点及其可用文件（Module A）
+     * 基于 NDBC 官方 activestations.xml + realtime2 文件目录发现活跃站点。
      */
     @GetMapping("/discover-stations")
     public Result<List<Map<String, Object>>> discoverStations() {
-        log.info("开始扫描 NDBC realtime2 目录");
+        log.info("开始扫描 NDBC activestations.xml 与 realtime2 文件目录");
         try {
-            String url = "https://www.ndbc.noaa.gov/data/realtime2/";
-            org.springframework.web.client.RestTemplate rt = new org.springframework.web.client.RestTemplate();
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-            headers.set("User-Agent", "Mozilla/5.0 OceanDataSystem/1.0");
-            org.springframework.http.HttpEntity<String> entity = new org.springframework.http.HttpEntity<>(headers);
-            org.springframework.http.ResponseEntity<String> resp = rt.exchange(
-                    url, org.springframework.http.HttpMethod.GET, entity, String.class);
-            String html = resp.getBody();
-            if (html == null) return Result.fail(500, "NDBC 返回空内容");
+            Map<String, Map<String, Object>> byStation = fetchActiveStationMetaMap();
 
-            // href="XXXXX.yyy"
+            String html = fetchNdbcText("https://www.ndbc.noaa.gov/data/realtime2/");
+            if (html == null) html = "";
             java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-                    "href=\"([A-Za-z0-9]+)\\.(txt|spec|ocean|rain|srad|supl|cwind|adcp|swdir|swdir2|swr1|swr2|hkp|dart)\"",
+                    "href=\"([A-Za-z0-9]+)\\.(txt|spec|data_spec|ocean|rain|srad|supl|cwind|adcp|pwind|swden|wlevel|tide|dart)\"",
                     java.util.regex.Pattern.CASE_INSENSITIVE);
             java.util.regex.Matcher m = p.matcher(html);
-            Map<String, Set<String>> byStation = new HashMap<>();
+            Map<String, Set<String>> suffixesByStation = new HashMap<>();
             while (m.find()) {
                 String station = m.group(1).toUpperCase();
                 String suffix = m.group(2).toLowerCase();
-                byStation.computeIfAbsent(station, k -> new HashSet<>()).add(suffix);
+                suffixesByStation.computeIfAbsent(station, k -> new HashSet<>()).add(suffix);
+                byStation.computeIfAbsent(station, k -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("stationId", station);
+                    return row;
+                });
             }
 
             List<Map<String, Object>> out = new ArrayList<>();
-            for (Map.Entry<String, Set<String>> e : byStation.entrySet()) {
-                Map<String, Object> row = new HashMap<>();
-                row.put("stationId", e.getKey());
-                row.put("availableSuffixes", new ArrayList<>(e.getValue()));
-                row.put("hasWaveData", e.getValue().contains("spec"));
+            for (Map.Entry<String, Map<String, Object>> e : byStation.entrySet()) {
+                Map<String, Object> row = e.getValue();
+                Set<String> suffixes = suffixesByStation.getOrDefault(e.getKey(), new HashSet<>());
+                row.put("availableSuffixes", new ArrayList<>(suffixes));
+                row.put("hasWaveData", hasWaveSuffix(suffixes));
+                row.put("stationType", stationTypeFromMeta(row, suffixes));
                 out.add(row);
             }
             out.sort((a, b) -> ((String) a.get("stationId")).compareTo((String) b.get("stationId")));
             log.info("NDBC 站点扫描完成: {} 个", out.size());
             return Result.success(out);
         } catch (Exception e) {
-            log.error("NDBC 目录扫描失败", e);
+            log.error("NDBC 站点扫描失败", e);
             return Result.fail(500, "扫描失败: " + e.getMessage());
         }
     }
 
     /**
-     * 抓取某站点 station_page.php 元数据（Module B）
+     * 查询某站点元数据，优先使用 NDBC activestations.xml。
      */
     @GetMapping("/station-meta")
     public Result<Map<String, Object>> stationMeta(@org.springframework.web.bind.annotation.RequestParam String stationId) {
@@ -481,58 +484,108 @@ public class NoaaDataSyncController {
     }
 
     /**
-     * 内部：抓取并解析 station_page.php（批量流程复用）
+     * 内部：读取 NDBC activestations.xml 元数据（批量流程复用）。
      */
     private Map<String, Object> fetchStationMeta(String stationId) throws Exception {
-        String sid = stationId;
-        String url = "https://www.ndbc.noaa.gov/station_page.php?station=" + sid.toLowerCase();
+        String sid = stationId == null ? "" : stationId.trim().toUpperCase();
+        Map<String, Map<String, Object>> active = fetchActiveStationMetaMap();
+        Map<String, Object> fromActive = active.get(sid);
+        if (fromActive != null) {
+            Map<String, Object> meta = new HashMap<>(fromActive);
+            meta.put("description", buildDescription(meta));
+            return meta;
+        }
+
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("stationId", sid);
+        meta.put("description", "NDBC 站点 " + sid + "，可通过 realtime2/latest_obs/station_history 等官方数据入口获取数据");
+        return meta;
+    }
+
+    private String fetchNdbcText(String url) {
         org.springframework.web.client.RestTemplate rt = new org.springframework.web.client.RestTemplate();
         org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
         headers.set("User-Agent", "Mozilla/5.0 OceanDataSystem/1.0");
         org.springframework.http.HttpEntity<String> entity = new org.springframework.http.HttpEntity<>(headers);
         org.springframework.http.ResponseEntity<String> resp = rt.exchange(
                 url, org.springframework.http.HttpMethod.GET, entity, String.class);
-        String html = resp.getBody();
-        if (html == null) return null;
-
-        Map<String, Object> meta = new HashMap<>();
-        meta.put("stationId", sid.toUpperCase());
-
-        java.util.regex.Matcher nm = java.util.regex.Pattern
-                .compile("<h1[^>]*>\\s*Station\\s+\\S+\\s*-\\s*([^<]+)</h1>", java.util.regex.Pattern.CASE_INSENSITIVE)
-                .matcher(html);
-        if (nm.find()) meta.put("stationName", nm.group(1).trim());
-
-        java.util.regex.Matcher lm = java.util.regex.Pattern
-                .compile("(-?\\d+\\.\\d+)\\s*([NS])\\s*(-?\\d+\\.\\d+)\\s*([EW])")
-                .matcher(html);
-        if (lm.find()) {
-            double lat = Double.parseDouble(lm.group(1));
-            if ("S".equalsIgnoreCase(lm.group(2))) lat = -lat;
-            double lon = Double.parseDouble(lm.group(3));
-            if ("W".equalsIgnoreCase(lm.group(4))) lon = -lon;
-            meta.put("latitude", lat);
-            meta.put("longitude", lon);
-        }
-
-        java.util.regex.Matcher dm = java.util.regex.Pattern
-                .compile("Water depth:?\\s*</?[^>]*>?\\s*([\\d.]+\\s*m)", java.util.regex.Pattern.CASE_INSENSITIVE)
-                .matcher(html);
-        if (dm.find()) meta.put("waterDepth", dm.group(1).trim());
-
-        java.util.regex.Matcher om = java.util.regex.Pattern
-                .compile("Owner:?\\s*</?[^>]*>?\\s*([^<\\n]+)", java.util.regex.Pattern.CASE_INSENSITIVE)
-                .matcher(html);
-        if (om.find()) meta.put("owner", om.group(1).trim());
-
-        meta.put("description", buildDescription(meta));
-        return meta;
+        return resp.getBody();
     }
+
+    private Map<String, Map<String, Object>> fetchActiveStationMetaMap() throws Exception {
+        String xml = fetchNdbcText("https://www.ndbc.noaa.gov/activestations.xml");
+        Map<String, Map<String, Object>> out = new HashMap<>();
+        if (xml == null || xml.trim().isEmpty()) {
+            return out;
+        }
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        NodeList nodes = factory.newDocumentBuilder()
+                .parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)))
+                .getElementsByTagName("station");
+        for (int i = 0; i < nodes.getLength(); i++) {
+            if (!(nodes.item(i) instanceof Element)) continue;
+            Element el = (Element) nodes.item(i);
+            String sid = attr(el, "id").toUpperCase();
+            if (sid.isEmpty()) continue;
+            Map<String, Object> row = new HashMap<>();
+            row.put("stationId", sid);
+            row.put("stationName", attr(el, "name"));
+            row.put("owner", attr(el, "owner"));
+            row.put("program", attr(el, "pgm"));
+            row.put("stationClass", attr(el, "type"));
+            putDecimal(row, "latitude", attr(el, "lat"));
+            putDecimal(row, "longitude", attr(el, "lon"));
+            row.put("met", flag(attr(el, "met")));
+            row.put("currents", flag(attr(el, "currents")));
+            row.put("waterquality", flag(attr(el, "waterquality")));
+            row.put("dart", flag(attr(el, "dart")));
+            out.put(sid, row);
+        }
+        return out;
+    }
+
+    private String attr(Element el, String name) {
+        String v = el.getAttribute(name);
+        return v == null ? "" : v.trim();
+    }
+
+    private boolean flag(String raw) {
+        if (raw == null) return false;
+        String v = raw.trim().toLowerCase();
+        return "y".equals(v) || "yes".equals(v) || "true".equals(v) || "1".equals(v);
+    }
+
+    private void putDecimal(Map<String, Object> row, String key, String raw) {
+        if (raw == null || raw.trim().isEmpty()) return;
+        try {
+            row.put(key, Double.parseDouble(raw.trim()));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private boolean hasWaveSuffix(Set<String> suffixes) {
+        return suffixes.contains("spec") || suffixes.contains("data_spec") || suffixes.contains("swden");
+    }
+
+    private String stationTypeFromMeta(Map<String, Object> meta, Set<String> suffixes) {
+        if (Boolean.TRUE.equals(meta.get("dart")) || suffixes.contains("dart")) return "DART";
+        if (Boolean.TRUE.equals(meta.get("currents")) || suffixes.contains("adcp")) return "CURRENT";
+        if (suffixes.contains("tide") || suffixes.contains("wlevel")) return "WATER_LEVEL";
+        if (hasWaveSuffix(suffixes)) return "WAVE";
+        if (Boolean.TRUE.equals(meta.get("waterquality")) || suffixes.contains("ocean")) return "OCEAN";
+        if (Boolean.TRUE.equals(meta.get("met")) || suffixes.contains("txt") || suffixes.contains("cwind")) return "MET";
+        return "NOAA";
+    }
+
 
     private String buildDescription(Map<String, Object> meta) {
         StringBuilder sb = new StringBuilder();
         if (meta.get("stationName") != null) sb.append(meta.get("stationName")).append(" | ");
-        if (meta.get("waterDepth") != null) sb.append("水深: ").append(meta.get("waterDepth")).append(" | ");
+        if (meta.get("stationClass") != null) sb.append("类型: ").append(meta.get("stationClass")).append(" | ");
+        if (meta.get("program") != null) sb.append("项目: ").append(meta.get("program")).append(" | ");
         if (meta.get("owner") != null) sb.append("所属: ").append(meta.get("owner"));
         return sb.toString();
     }
@@ -599,6 +652,12 @@ public class NoaaDataSyncController {
                     if (meta.get("longitude") != null) cfg.put("longitude", String.valueOf(meta.get("longitude")));
                     if (meta.get("waterDepth") != null) cfg.put("waterDepth", meta.get("waterDepth"));
                     if (meta.get("owner") != null) cfg.put("owner", meta.get("owner"));
+                    if (meta.get("program") != null) cfg.put("program", meta.get("program"));
+                    if (meta.get("stationClass") != null) cfg.put("stationClass", meta.get("stationClass"));
+                    if (meta.get("met") != null) cfg.put("met", meta.get("met"));
+                    if (meta.get("currents") != null) cfg.put("currents", meta.get("currents"));
+                    if (meta.get("waterquality") != null) cfg.put("waterquality", meta.get("waterquality"));
+                    if (meta.get("dart") != null) cfg.put("dart", meta.get("dart"));
                     if (meta.get("stationName") != null) cfg.put("stationName", meta.get("stationName"));
                     ds.setConfigJson(cfg.toJSONString());
                 }

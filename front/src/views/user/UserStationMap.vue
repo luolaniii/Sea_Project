@@ -2,17 +2,71 @@
   <div class="station-map-page">
     <div class="page-header glass">
       <div class="header-left">
+        <h2><Icon name="map" :size="22" color="#00d4ff" /> 全球海洋观测站点地图</h2>
         <div class="page-eyebrow">
           <span class="dash"></span>
           <span class="eyebrow-text">GLOBAL · NDBC NETWORK</span>
         </div>
-        <h2><Icon name="map" :size="22" color="#00d4ff" /> 全球海洋观测站点地图</h2>
-        <p class="subtitle">{{ stations.length }} 个站点 · {{ waveCount }} 个有波浪数据 · 点击站点跳转可视化</p>
+        <p class="subtitle">
+          当前筛选 {{ filteredStations.length }} / {{ stations.length }} 个站点
+          · {{ filteredWaveCount }} 个有波浪数据
+          · 输入站名/站点ID可直接搜索定位
+        </p>
+        <div class="station-filters">
+          <input
+            v-model="searchKeyword"
+            type="text"
+            class="station-search"
+            placeholder="搜索站点名称 / 站点ID / 类型 / 海域"
+          />
+          <select v-model="selectedOcean" class="station-select">
+            <option value="">全部海域</option>
+            <option v-for="o in oceanOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
+          <select v-model="selectedStationType" class="station-select">
+            <option value="">全部数据类型</option>
+            <option v-for="t in stationTypeOptions" :key="t.value" :value="t.value">{{ t.label }}</option>
+          </select>
+          <select v-model="selectedFeature" class="station-select">
+            <option value="">全部站点特征</option>
+            <option value="wave">有波浪数据</option>
+            <option value="no-wave">仅气象/其他</option>
+            <option value="has-chart">有图表</option>
+            <option value="has-scene">有场景</option>
+            <option value="auto-sync">自动同步</option>
+            <option value="no-coord">无坐标</option>
+          </select>
+        </div>
       </div>
       <div class="legend">
         <span class="legend-item"><span class="dot wave"></span> 有波浪数据</span>
         <span class="legend-item"><span class="dot no-wave"></span> 仅气象/其他</span>
         <span class="legend-item"><span class="dot empty"></span> 无坐标</span>
+      </div>
+    </div>
+
+    <div class="map-compare-panel glass">
+      <div class="compare-head">
+        <div>
+          <h3><Icon name="bars" :size="17" color="#00d4ff" /> 当前筛选结果对比</h3>
+          <p>按上方海域、数据类型、来源机构和站点特征筛选后，对当前结果中的可定位站点做 24 小时多站点比较。</p>
+        </div>
+        <button class="compare-btn" :disabled="comparisonLoading || compareCandidateIds.length < 2" @click="compareFilteredStations">
+          {{ comparisonLoading ? '对比中...' : `对比 ${compareCandidateIds.length} 个站点` }}
+        </button>
+      </div>
+      <p v-if="comparisonError" class="compare-error">{{ comparisonError }}</p>
+      <div v-if="comparisonResult" class="compare-result">
+        <div v-for="row in comparisonMetricRows" :key="row.key" class="compare-metric">
+          <span>{{ row.label }}</span>
+          <strong>{{ fmt(row.stat?.mean) }}</strong>
+          <small>范围 {{ fmt(row.stat?.min) }} ~ {{ fmt(row.stat?.max) }}</small>
+        </div>
+        <div class="compare-anomaly">
+          <strong>空间异常</strong>
+          <span v-if="!comparisonResult.anomalies?.length">未发现显著偏离群体均值的站点</span>
+          <span v-else>{{ comparisonResult.anomalies.length }} 个异常：{{ comparisonAnomalyText }}</span>
+        </div>
       </div>
     </div>
 
@@ -25,11 +79,11 @@
     </div>
 
     <!-- 无坐标站点列表（兜底） -->
-    <div v-if="noCoordStations.length" class="no-coord-panel glass">
-      <h4><Icon name="alert" :size="16" color="#faad14" /> 暂无经纬度的站点 ({{ noCoordStations.length }})</h4>
+    <div v-if="filteredNoCoordStations.length" class="no-coord-panel glass">
+      <h4><Icon name="alert" :size="16" color="#faad14" /> 暂无经纬度的站点 ({{ filteredNoCoordStations.length }})</h4>
       <p class="hint">请在管理端为这些站点配置经度/纬度，或使用"批量导入NDBC站点"自动获取坐标。</p>
       <div class="no-coord-grid">
-        <span v-for="s in noCoordStations" :key="String(s.id)" class="no-coord-tag">
+        <span v-for="s in filteredNoCoordStations" :key="String(s.id)" class="no-coord-tag">
           {{ s.name || s.stationId }}
         </span>
       </div>
@@ -38,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, nextTick } from 'vue';
+import { onMounted, onUnmounted, ref, computed, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -52,25 +106,127 @@ interface MapStation {
   description?: string;
   longitude?: number | string | null;
   latitude?: number | string | null;
+  sourceType?: string;
+  stationType?: string;
+  stationTypeDesc?: string;
+  apiUrl?: string;
+  officialUrl?: string;
+  historyUrl?: string;
+  buoyCamUrl?: string;
+  autoSync?: number;
   hasWave?: boolean;
   fileSuffixes?: string;
   chartIds?: (number | string)[];
   sceneIds?: (number | string)[];
+  oceanRegion?: string;
+  oceanRegionDesc?: string;
 }
 
 const router = useRouter();
 const stations = ref<MapStation[]>([]);
+const searchKeyword = ref('');
+const selectedStationType = ref('');
+const selectedFeature = ref('');
+const selectedOcean = ref('');
+const comparisonLoading = ref(false);
+const comparisonError = ref('');
+const comparisonResult = ref<any>(null);
 const mapEl = ref<HTMLDivElement | null>(null);
 let map: L.Map | null = null;
 let markersLayer: L.LayerGroup | null = null;
 
+const stationTypeOptions = computed(() => {
+  const map = new Map<string, string>();
+  stations.value.forEach((s) => {
+    const code = String(s.stationType || s.sourceType || '').trim();
+    const label = String(s.stationTypeDesc || code).trim();
+    if (code) map.set(code, label || code);
+  });
+  return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+});
+
+const oceanOptions = computed(() => {
+  const map = new Map<string, string>();
+  stations.value.forEach((s) => {
+    const code = String(s.oceanRegion || '').trim();
+    const label = String(s.oceanRegionDesc || code).trim();
+    if (code) map.set(code, label || code);
+  });
+  return Array.from(map.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hans'));
+});
+
+const filteredStations = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase();
+  return stations.value.filter((s) => {
+    if (keyword) {
+      const hit = [s.name, s.stationId, s.sourceType, s.stationTypeDesc, s.description, s.oceanRegionDesc]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(keyword));
+      if (!hit) return false;
+    }
+
+    if (selectedStationType.value) {
+      const t = String(s.stationType || s.sourceType || '').trim().toUpperCase();
+      if (t !== selectedStationType.value.toUpperCase()) return false;
+    }
+
+    if (selectedOcean.value) {
+      if (String(s.oceanRegion || '').trim().toUpperCase() !== selectedOcean.value.toUpperCase()) return false;
+    }
+
+    switch (selectedFeature.value) {
+      case 'wave':
+        if (!s.hasWave) return false;
+        break;
+      case 'no-wave':
+        if (s.hasWave) return false;
+        break;
+      case 'has-chart':
+        if (!s.chartIds || s.chartIds.length === 0) return false;
+        break;
+      case 'has-scene':
+        if (!s.sceneIds || s.sceneIds.length === 0) return false;
+        break;
+      case 'auto-sync':
+        if (Number(s.autoSync) !== 1) return false;
+        break;
+      case 'no-coord':
+        if (!(toNum(s.longitude) === null || toNum(s.latitude) === null)) return false;
+        break;
+      default:
+        break;
+    }
+
+    return true;
+  });
+});
+
 const stationsWithCoords = computed(() =>
-  stations.value.filter((s) => toNum(s.longitude) !== null && toNum(s.latitude) !== null),
+  filteredStations.value.filter((s) => toNum(s.longitude) !== null && toNum(s.latitude) !== null),
 );
-const noCoordStations = computed(() =>
-  stations.value.filter((s) => toNum(s.longitude) === null || toNum(s.latitude) === null),
+const filteredNoCoordStations = computed(() =>
+  filteredStations.value.filter((s) => toNum(s.longitude) === null || toNum(s.latitude) === null),
 );
-const waveCount = computed(() => stations.value.filter((s) => s.hasWave).length);
+const filteredWaveCount = computed(() => filteredStations.value.filter((s) => s.hasWave).length);
+const compareCandidateIds = computed(() => stationsWithCoords.value.slice(0, 20).map((s) => String(s.id)));
+const comparisonMetricRows = computed(() => {
+  const metrics = comparisonResult.value?.metrics || {};
+  return [
+    { key: 'temperature', label: '温度均值', stat: metrics.temperature },
+    { key: 'waveHeight', label: '波高均值', stat: metrics.waveHeight },
+    { key: 'windSpeed', label: '风速均值', stat: metrics.windSpeed },
+    { key: 'stabilityIndex', label: '稳定性均值', stat: metrics.stabilityIndex },
+  ];
+});
+const comparisonAnomalyText = computed(() =>
+  (comparisonResult.value?.anomalies || [])
+    .slice(0, 3)
+    .map((a: any) => a.sourceName || a.dataSourceId)
+    .filter(Boolean)
+    .join('、'),
+);
 
 function toNum(v: any): number | null {
   if (v === null || v === undefined || v === '') return null;
@@ -83,12 +239,31 @@ function markerColor(s: MapStation): string {
   return '#faad14';
 }
 
+function fmt(v: any): string {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return n.toFixed(2);
+}
+
+function pathWithId(base: string, id: string | number | null | undefined): string {
+  if (id == null || String(id).trim() === '') return base;
+  return `${base}/${encodeURIComponent(String(id).trim())}`;
+}
+
 function escapeHtml(s: string): string {
   return String(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function openExternalUrl(raw: string) {
+  const url = String(raw || '').trim();
+  if (!url) return;
+  const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  window.open(normalized, '_blank', 'noopener,noreferrer');
 }
 
 /** 内联 SVG 图标（popup 是 DOM 字符串拼接，无法用 Vue 组件） */
@@ -105,6 +280,8 @@ const SVG_ICONS = {
     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M16.95 7.05a7 7 0 0 1 0 9.9M7.05 16.95a7 7 0 0 1 0-9.9M19.78 4.22a11 11 0 0 1 0 15.56M4.22 19.78a11 11 0 0 1 0-15.56"/></svg>',
   pin:
     '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+  eye:
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
 };
 
 /**
@@ -115,13 +292,21 @@ function buildPopupNode(s: MapStation): HTMLElement {
   const lat = toNum(s.latitude);
   const sceneId = s.sceneIds && s.sceneIds.length ? s.sceneIds[0] : null;
   const chartId = s.chartIds && s.chartIds.length ? s.chartIds[0] : null;
+  const officialUrl = (s.officialUrl || '').trim();
+  const buoyCamUrl = (s.buoyCamUrl || '').trim();
+  const historyUrl = (s.historyUrl || '').trim();
 
   const root = document.createElement('div');
   root.className = 'pp-card';
+  L.DomEvent.disableClickPropagation(root);
+  L.DomEvent.disableScrollPropagation(root);
 
   const titleHtml = `<span class="pp-icon">${SVG_ICONS.signal}</span> ${escapeHtml(s.name || s.stationId || '未命名站点')}`;
   const meta =
     `<span class="pp-tag ${s.hasWave ? 'wave' : 'other'}">${s.hasWave ? '波浪数据' : '仅气象'}</span>` +
+    `<span class="pp-tag type">${escapeHtml(s.stationTypeDesc || s.sourceType || '未分类')}</span>` +
+    (s.oceanRegionDesc ? `<span class="pp-tag ocean">${escapeHtml(s.oceanRegionDesc)}</span>` : '') +
+    (Number(s.autoSync) === 1 ? `<span class="pp-tag auto">自动同步</span>` : '') +
     (s.stationId ? `<span class="pp-tag id">${escapeHtml(s.stationId)}</span>` : '');
   const coord =
     lat !== null && lon !== null
@@ -153,6 +338,7 @@ function buildPopupNode(s: MapStation): HTMLElement {
       b.classList.add('disabled');
     } else {
       b.addEventListener('click', (e) => {
+        e.preventDefault();
         e.stopPropagation();
         handler();
       });
@@ -164,14 +350,14 @@ function buildPopupNode(s: MapStation): HTMLElement {
     SVG_ICONS.wave,
     sceneId ? '查看 3D 场景' : '暂无场景',
     'primary',
-    () => router.push(`/user/scene/${sceneId}`),
+    () => router.push(pathWithId('/user/scene', sceneId)),
     !sceneId,
   );
   mkBtn(
     SVG_ICONS.chart,
     chartId ? '查看图表' : '暂无图表',
     '',
-    () => router.push(`/user/chart/${chartId}`),
+    () => router.push(pathWithId('/user/chart', chartId)),
     !chartId,
   );
   mkBtn(SVG_ICONS.brain, '辅助决策 AI', '', () =>
@@ -179,11 +365,24 @@ function buildPopupNode(s: MapStation): HTMLElement {
   );
   mkBtn(
     SVG_ICONS.external,
-    'NDBC 官网',
+    '站点官网',
     'ghost',
-    () =>
-      window.open(`https://www.ndbc.noaa.gov/station_page.php?station=${s.stationId || ''}`, '_blank'),
-    !s.stationId,
+    () => openExternalUrl(officialUrl),
+    !officialUrl,
+  );
+  mkBtn(
+    SVG_ICONS.eye,
+    '现场图片',
+    'ghost',
+    () => openExternalUrl(buoyCamUrl),
+    !buoyCamUrl,
+  );
+  mkBtn(
+    SVG_ICONS.external,
+    '历史数据',
+    'ghost',
+    () => openExternalUrl(historyUrl),
+    !historyUrl,
   );
 
   return root;
@@ -201,18 +400,49 @@ async function loadStations() {
         stationId: s.stationId,
         name: s.name,
         description: s.description,
+        sourceType: s.sourceType,
+        stationType: s.stationType,
+        stationTypeDesc: s.stationTypeDesc,
+        apiUrl: s.apiUrl,
+        officialUrl: s.officialUrl,
+        historyUrl: s.historyUrl,
+        buoyCamUrl: s.buoyCamUrl,
+        autoSync: Number(s.autoSync ?? 0) || 0,
         longitude: s.longitude,
         latitude: s.latitude,
         fileSuffixes: s.fileSuffixes,
         chartIds: charts.map((c) => c.id),
         sceneIds: scenes.map((sc) => sc.id),
-        hasWave: suffix.includes('spec') || charts.length > 0,
+        hasWave: Boolean(s.hasWaveData) || suffix.includes('spec') || suffix.includes('wave') || charts.length > 0,
+        oceanRegion: s.oceanRegion,
+        oceanRegionDesc: s.oceanRegionDesc,
       } as MapStation;
     });
     await nextTick();
     renderMarkers();
   } catch (e) {
     console.error('加载站点地图失败', e);
+  }
+}
+
+async function compareFilteredStations() {
+  if (compareCandidateIds.value.length < 2) {
+    comparisonError.value = '当前筛选结果不足 2 个可定位站点，无法对比';
+    comparisonResult.value = null;
+    return;
+  }
+  comparisonLoading.value = true;
+  comparisonError.value = '';
+  try {
+    comparisonResult.value = await userApi.analyzeOceanCompare({
+      dataSourceIds: compareCandidateIds.value,
+      historyHours: 24,
+    });
+  } catch (e: any) {
+    comparisonError.value = e?.message || '多站点对比失败';
+    comparisonResult.value = null;
+  } finally {
+    comparisonLoading.value = false;
   }
 }
 
@@ -298,6 +528,12 @@ onMounted(async () => {
   await loadStations();
 });
 
+watch([searchKeyword, selectedStationType, selectedFeature, selectedOcean], () => {
+  comparisonResult.value = null;
+  comparisonError.value = '';
+  renderMarkers();
+});
+
 onUnmounted(() => {
   if (map) {
     map.remove();
@@ -334,7 +570,8 @@ onUnmounted(() => {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 6px;
+    margin-top: 6px;
+    margin-bottom: 0;
   }
   .page-eyebrow .dash {
     width: 28px;
@@ -359,10 +596,41 @@ onUnmounted(() => {
     gap: 10px;
   }
   .subtitle {
-    margin: 6px 0 0;
+    margin: 8px 0 0;
     color: rgba(224, 242, 255, 0.55);
     font-size: 13px;
     letter-spacing: 0.3px;
+  }
+
+  .station-filters {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: minmax(260px, 1.4fr) repeat(3, minmax(160px, 1fr));
+    gap: 10px;
+    width: min(1040px, 100%);
+  }
+
+  .station-search,
+  .station-select {
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid rgba(125, 211, 252, 0.32);
+    background: rgba(255, 255, 255, 0.94);
+    color: #0f172a;
+    padding: 0 12px;
+    font-size: 13px;
+    letter-spacing: 0.2px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+    &:focus {
+      outline: none;
+      border-color: rgba(0, 212, 255, 0.62);
+      box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.15);
+    }
+  }
+
+  .station-search::placeholder {
+    color: #64748b;
   }
 }
 
@@ -398,6 +666,125 @@ onUnmounted(() => {
   }
 }
 
+.map-compare-panel {
+  padding: 16px 20px;
+  color: rgba(224, 242, 255, 0.9);
+}
+
+.compare-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+
+  h3 {
+    margin: 0 0 6px;
+    color: #e0f2ff;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  p {
+    margin: 0;
+    color: rgba(224, 242, 255, 0.68);
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+}
+
+.compare-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #02a8df, #22d3ee);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(2, 132, 199, 0.24);
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgba(2, 132, 199, 0.32);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+.compare-error {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  color: #fecaca;
+  font-size: 12px;
+}
+
+.compare-result {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 10px;
+}
+
+.compare-metric,
+.compare-anomaly {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(125, 211, 252, 0.26);
+}
+
+.compare-metric {
+  span {
+    color: rgba(224, 242, 255, 0.68);
+    font-size: 12px;
+  }
+
+  strong {
+    display: block;
+    margin: 5px 0 3px;
+    color: #ffffff;
+    font-size: 22px;
+    line-height: 1.1;
+  }
+
+  small {
+    color: rgba(224, 242, 255, 0.58);
+    font-size: 11px;
+  }
+}
+
+.compare-anomaly {
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+
+  strong {
+    color: #ffffff;
+    font-size: 13px;
+  }
+
+  span {
+    color: rgba(224, 242, 255, 0.72);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+}
+
 .map-container {
   position: relative;
   height: calc(100vh - 240px);
@@ -418,13 +805,13 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(10, 26, 46, 0.72);
-  color: #7ecfff;
+  background: rgba(255, 255, 255, 0.9);
+  color: #0c4a6e;
   padding: 7px 14px;
   border-radius: 999px;
   font-size: 12px;
   letter-spacing: 0.3px;
-  border: 1px solid rgba(74, 144, 226, 0.3);
+  border: 1px solid rgba(2, 132, 199, 0.22);
   z-index: 500;
   pointer-events: none;
   backdrop-filter: blur(8px);
@@ -432,17 +819,18 @@ onUnmounted(() => {
 
 // 自定义 Leaflet popup
 .leaflet-popup.ocean-popup .leaflet-popup-content-wrapper {
-  background: linear-gradient(135deg, rgba(15, 35, 60, 0.95), rgba(10, 25, 45, 0.95));
-  color: #e0f2ff;
-  border: 1px solid rgba(74, 144, 226, 0.4);
+  background: rgba(255, 255, 255, 0.94);
+  color: #0f172a;
+  border: 1px solid rgba(2, 132, 199, 0.26);
   border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 18px 34px -14px rgba(2, 132, 199, 0.45);
+  backdrop-filter: blur(12px);
 }
 .leaflet-popup.ocean-popup .leaflet-popup-tip {
-  background: rgba(15, 35, 60, 0.95);
+  background: rgba(255, 255, 255, 0.96);
 }
 .leaflet-popup.ocean-popup .leaflet-popup-close-button {
-  color: #7ecfff;
+  color: #0284c7;
   font-size: 22px;
 }
 
@@ -456,7 +844,7 @@ onUnmounted(() => {
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  color: #00d4ff;
+  color: #0369a1;
   margin-bottom: 10px;
   letter-spacing: 0.3px;
 }
@@ -467,8 +855,9 @@ onUnmounted(() => {
   width: 24px;
   height: 24px;
   border-radius: 6px;
-  background: rgba(0, 212, 255, 0.12);
-  border: 1px solid rgba(0, 212, 255, 0.3);
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  color: #0284c7;
 }
 .pp-meta {
   display: flex;
@@ -482,36 +871,51 @@ onUnmounted(() => {
   border-radius: 999px;
   font-size: 11px;
   letter-spacing: 0.3px;
-  background: rgba(74, 144, 226, 0.18);
-  border: 1px solid rgba(74, 144, 226, 0.3);
-  color: #7ecfff;
+  background: #f1f5f9;
+  border: 1px solid #dbe8f4;
+  color: #475569;
 }
 .pp-tag.wave {
-  background: rgba(0, 212, 255, 0.16);
-  color: #00d4ff;
-  border-color: rgba(0, 212, 255, 0.4);
+  background: #dff6ff;
+  color: #0369a1;
+  border-color: #a5e6ff;
+}
+.pp-tag.type {
+  background: #ecfeff;
+  color: #0c4a6e;
+  border-color: #a5f3fc;
+}
+.pp-tag.auto {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
 }
 .pp-tag.other {
-  background: rgba(250, 173, 20, 0.16);
-  color: #ffc868;
-  border-color: rgba(250, 173, 20, 0.4);
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
 }
 .pp-tag.id {
   font-family: 'JetBrains Mono', monospace;
   letter-spacing: 0.6px;
+}
+.pp-tag.ocean {
+  background: #eef2ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
 }
 .pp-coord {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: rgba(224, 242, 255, 0.7);
+  color: #64748b;
   margin-bottom: 8px;
   font-family: 'JetBrains Mono', monospace;
 }
 .pp-desc {
   font-size: 12px;
-  color: rgba(224, 242, 255, 0.6);
+  color: #475569;
   margin-bottom: 12px;
   line-height: 1.55;
   max-height: 60px;
@@ -526,9 +930,9 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(74, 144, 226, 0.1);
-  color: rgba(224, 242, 255, 0.9);
-  border: 1px solid rgba(74, 144, 226, 0.3);
+  background: #f8fbff;
+  color: #0f172a;
+  border: 1px solid #dbe8f4;
   padding: 8px 12px;
   border-radius: 8px;
   cursor: pointer;
@@ -544,30 +948,30 @@ onUnmounted(() => {
   justify-content: center;
   width: 18px;
   height: 18px;
-  color: #00d4ff;
+  color: #0284c7;
 }
 .pp-btn:hover:not(.disabled):not(:disabled) {
-  background: rgba(0, 212, 255, 0.16);
-  border-color: rgba(0, 212, 255, 0.55);
-  color: #fff;
-  transform: translateX(2px);
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  color: #0f172a;
+  transform: translateX(1px);
 }
 .pp-btn.primary {
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.22), rgba(74, 144, 226, 0.18));
-  border-color: rgba(0, 212, 255, 0.5);
+  background: linear-gradient(135deg, #0284c7, #06b6d4);
+  border-color: rgba(2, 132, 199, 0.45);
   color: #fff;
 }
 .pp-btn.ghost {
   background: transparent;
-  border-color: rgba(224, 242, 255, 0.18);
-  color: rgba(224, 242, 255, 0.65);
+  border-color: #cbd5e1;
+  color: #64748b;
 }
 .pp-btn.ghost .pp-btn-icon {
-  color: rgba(224, 242, 255, 0.6);
+  color: #64748b;
 }
 .pp-btn.disabled,
 .pp-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -613,6 +1017,17 @@ onUnmounted(() => {
     padding: 3px 10px;
     border-radius: 12px;
     font-size: 12px;
+  }
+}
+
+@media (max-width: 980px) {
+  .page-header .station-filters {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .compare-anomaly {
+    grid-column: auto;
   }
 }
 </style>

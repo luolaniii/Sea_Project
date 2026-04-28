@@ -84,41 +84,39 @@ const handleConfirm = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(10, 26, 46, 0.85);
+  background: rgba(15, 23, 42, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(8px);
   padding: 20px;
 }
 
 .modal-container {
-  background: linear-gradient(135deg, rgba(30, 58, 95, 0.95), rgba(22, 33, 62, 0.95));
-  border: 1px solid rgba(74, 144, 226, 0.4);
-  border-radius: 24px;
+  background: #ffffff;
+  border: 1px solid #dbe8f4;
+  border-radius: 18px;
   width: 100%;
   max-width: 640px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   box-shadow: 
-    0 25px 80px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(74, 144, 226, 0.3) inset,
-    0 8px 32px rgba(74, 144, 226, 0.15);
+    0 26px 60px -24px rgba(15, 23, 42, 0.35),
+    0 10px 24px rgba(2, 132, 199, 0.12);
   overflow: hidden;
   position: relative;
   z-index: 1001;
-  backdrop-filter: blur(20px);
 }
 
 .modal-header {
-  padding: 24px 28px;
-  border-bottom: 1px solid rgba(74, 144, 226, 0.3);
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(135deg, rgba(74, 144, 226, 0.15), rgba(0, 212, 255, 0.1));
+  background: linear-gradient(180deg, #f8fbff 0%, #f2f8ff 100%);
   position: relative;
 
   &::before {
@@ -127,63 +125,49 @@ const handleConfirm = () => {
     top: 0;
     left: 0;
     right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, #4a90e2, #00d4ff);
+    height: 2px;
+    background: linear-gradient(90deg, #0284c7, #06b6d4);
   }
 
   h3 {
-    font-size: 20px;
-    font-weight: 600;
-    color: #e0f2ff;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
     margin: 0;
-    letter-spacing: 0.3px;
-    background: linear-gradient(135deg, #e0f2ff 0%, rgba(224, 242, 255, 0.9) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    letter-spacing: 0.2px;
   }
 }
 
 .modal-close {
-  background: rgba(30, 58, 95, 0.6);
-  border: 1px solid rgba(74, 144, 226, 0.3);
-  color: rgba(224, 242, 255, 0.8);
-  font-size: 24px;
+  background: #f8fafc;
+  border: 1px solid #dbe8f4;
+  color: #64748b;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 8px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(10px);
 
   &:hover {
-    background: rgba(74, 144, 226, 0.3);
-    border-color: rgba(74, 144, 226, 0.5);
-    color: #e0f2ff;
+    background: #eff6ff;
+    border-color: #bae6fd;
+    color: #0284c7;
     transform: rotate(90deg);
-    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
   }
 }
 
 .modal-body {
-  padding: 28px;
+  padding: 24px;
   overflow-y: auto;
   overflow-x: visible;
   flex: 1;
-  position: relative;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(102, 126, 234, 0.3) transparent;
-  
-  // 确保下拉框不被裁剪
-  :deep(select) {
-    position: relative;
-    z-index: 10;
-  }
+  color: #334155;
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -194,22 +178,34 @@ const handleConfirm = () => {
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(102, 126, 234, 0.3);
+    background: rgba(148, 163, 184, 0.4);
     border-radius: 3px;
 
     &:hover {
-      background: rgba(102, 126, 234, 0.5);
+      background: rgba(148, 163, 184, 0.6);
     }
+  }
+
+  :deep(.form-item label) {
+    color: #334155;
+  }
+
+  :deep(.form-item small) {
+    color: #64748b;
+  }
+
+  :deep(select) {
+    color-scheme: light;
   }
 }
 
 .modal-footer {
-  padding: 20px 28px;
-  border-top: 1px solid rgba(74, 144, 226, 0.3);
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  background: rgba(30, 58, 95, 0.3);
+  background: #f8fbff;
 }
 
 .modal-enter-active,
@@ -245,19 +241,15 @@ const handleConfirm = () => {
   }
 
   .modal-header {
-    padding: 20px 24px;
-
-    h3 {
-      font-size: 18px;
-    }
+    padding: 18px 20px;
   }
 
   .modal-body {
-    padding: 24px;
+    padding: 18px;
   }
 
   .modal-footer {
-    padding: 16px 24px;
+    padding: 14px 18px;
     flex-wrap: wrap;
   }
 }

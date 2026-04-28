@@ -12,7 +12,9 @@
           class="nav-item"
           active-class="active"
         >
-          <span class="nav-icon">{{ item.icon }}</span>
+          <span class="nav-icon">
+            <Icon :name="item.icon" :size="18" />
+          </span>
           <span class="nav-text">{{ item.label }}</span>
         </router-link>
       </nav>
@@ -41,20 +43,23 @@ import { computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { message } from '@/utils/message';
+import Icon from '@/components/Icon.vue';
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 
 const menuItems = [
-  { path: '/admin/dashboard', label: '仪表盘', icon: '📊' },
-  { path: '/admin/data-source', label: '数据源管理', icon: '🗄️' },
-  { path: '/admin/observation-data', label: '观测数据', icon: '📈' },
-  { path: '/admin/noaa-data-sync', label: 'NOAA数据同步', icon: '🌐' },
-  { path: '/admin/scene', label: '场景管理', icon: '🌊' },
-  { path: '/admin/chart-config', label: '图表配置', icon: '📉' },
-  { path: '/admin/system-config', label: '系统配置', icon: '⚙️' },
-  { path: '/admin/forum-post', label: '帖子管理', icon: '💬' },
+  { path: '/admin/dashboard', label: '仪表盘', icon: 'dashboard' },
+  { path: '/admin/data-source', label: '数据源管理', icon: 'database' },
+  { path: '/admin/observation-data', label: '观测数据', icon: 'chart' },
+  { path: '/admin/noaa-data-sync', label: 'NOAA数据同步', icon: 'refresh' },
+  { path: '/admin/scene', label: '场景管理', icon: 'scene' },
+  { path: '/admin/chart-config', label: '图表配置', icon: 'trendDown' },
+  { path: '/admin/system-config', label: '系统配置', icon: 'settings' },
+  { path: '/admin/forum-post', label: '帖子管理', icon: 'chat' },
+  { path: '/admin/expert-application', label: '专家审核', icon: 'check' },
+  { path: '/admin/recharge', label: '充值订单', icon: 'database' },
 ];
 
 const currentPageTitle = computed(() => {
@@ -72,7 +77,7 @@ const handleLogout = async () => {
 .admin-layout {
   display: flex;
   height: 100vh;
-  background: linear-gradient(135deg, #0a1a2e 0%, #16213e 50%, #1e3a5f 100%);
+  background: linear-gradient(180deg, #f5f9ff 0%, #eef4fb 100%);
   position: relative;
   overflow: hidden;
 
@@ -83,24 +88,22 @@ const handleLogout = async () => {
     left: 0;
     right: 0;
     bottom: 0;
-    background: 
-      radial-gradient(circle at 20% 30%, rgba(74, 144, 226, 0.08) 0%, transparent 50%),
-      radial-gradient(circle at 80% 70%, rgba(0, 212, 255, 0.06) 0%, transparent 50%);
+    background:
+      radial-gradient(circle at 18% 24%, rgba(14, 165, 233, 0.15), transparent 48%),
+      radial-gradient(circle at 84% 76%, rgba(6, 182, 212, 0.12), transparent 45%);
     pointer-events: none;
-    animation: oceanFlow 25s ease-in-out infinite;
   }
 }
 
 .sidebar {
   width: 260px;
-  background: linear-gradient(135deg, rgba(30, 58, 95, 0.85), rgba(22, 33, 62, 0.85));
-  backdrop-filter: blur(20px);
-  border-right: 1px solid rgba(74, 144, 226, 0.3);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border-right: 1px solid #dbe8f4;
   display: flex;
   flex-direction: column;
   position: relative;
   z-index: 1;
-  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4), inset -1px 0 0 rgba(74, 144, 226, 0.1);
+  box-shadow: 8px 0 28px -24px rgba(15, 23, 42, 0.35);
   
   &::before {
     content: '';
@@ -109,28 +112,27 @@ const handleLogout = async () => {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(180deg, rgba(74, 144, 226, 0.05) 0%, transparent 100%);
+    background: linear-gradient(180deg, rgba(2, 132, 199, 0.06) 0%, transparent 100%);
     pointer-events: none;
   }
 }
 
 .sidebar-header {
   padding: 24px 20px;
-  border-bottom: 1px solid rgba(74, 144, 226, 0.3);
-  background: linear-gradient(135deg, rgba(74, 144, 226, 0.15), rgba(0, 212, 255, 0.1));
+  border-bottom: 1px solid #dbe8f4;
+  background: linear-gradient(180deg, #f4f9ff 0%, #eff6ff 100%);
   position: relative;
   z-index: 1;
 
   h2 {
     font-size: 20px;
     font-weight: 700;
-    background: linear-gradient(135deg, #4a90e2 0%, #00d4ff 50%, #20b2aa 100%);
+    background: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     margin: 0;
     letter-spacing: 0.5px;
-    text-shadow: 0 0 20px rgba(74, 144, 226, 0.3);
   }
 }
 
@@ -146,7 +148,7 @@ const handleLogout = async () => {
   align-items: center;
   padding: 14px 18px;
   margin-bottom: 6px;
-  color: rgba(224, 242, 255, 0.8);
+  color: #334155;
   text-decoration: none;
   border-radius: 12px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -163,23 +165,22 @@ const handleLogout = async () => {
     transform: translateY(-50%);
     width: 4px;
     height: 0;
-    background: linear-gradient(135deg, #4a90e2, #00d4ff);
+    background: linear-gradient(135deg, #0284c7, #06b6d4);
     border-radius: 0 2px 2px 0;
     transition: height 0.3s;
   }
 
   &:hover {
-    background: rgba(74, 144, 226, 0.2);
-    color: #e0f2ff;
+    background: rgba(2, 132, 199, 0.1);
+    color: #0f172a;
     transform: translateX(4px);
-    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.25);
   }
 
   &.active {
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.3), rgba(0, 212, 255, 0.2));
-    color: #fff;
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.18), rgba(6, 182, 212, 0.14));
+    color: #0f172a;
     font-weight: 600;
-    box-shadow: 0 4px 16px rgba(74, 144, 226, 0.35);
+    box-shadow: 0 8px 18px -14px rgba(2, 132, 199, 0.45);
 
     &::before {
       height: 70%;
@@ -188,10 +189,13 @@ const handleLogout = async () => {
 }
 
 .nav-icon {
-  font-size: 20px;
+  font-size: 0;
   margin-right: 14px;
   width: 24px;
   text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nav-text {
@@ -211,23 +215,22 @@ const handleLogout = async () => {
 .header {
   height: 64px;
   padding: 0 32px;
-  background: linear-gradient(135deg, rgba(30, 58, 95, 0.7), rgba(22, 33, 62, 0.7));
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(74, 144, 226, 0.3);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(16px) saturate(140%);
+  border-bottom: 1px solid #dbe8f4;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(74, 144, 226, 0.1);
+  box-shadow: 0 8px 22px -18px rgba(15, 23, 42, 0.35);
   position: relative;
   z-index: 1;
 
   h3 {
     font-size: 18px;
     font-weight: 600;
-    color: #e0f2ff;
+    color: #0f172a;
     margin: 0;
     letter-spacing: 0.3px;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   }
 }
 
@@ -239,13 +242,11 @@ const handleLogout = async () => {
 
 .user-info {
   font-size: 14px;
-  color: #e0f2ff;
+  color: #334155;
   padding: 6px 14px;
-  background: rgba(74, 144, 226, 0.2);
+  background: #f4f9ff;
   border-radius: 20px;
-  border: 1px solid rgba(74, 144, 226, 0.4);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.15);
+  border: 1px solid #dbe8f4;
 }
 
 .content {

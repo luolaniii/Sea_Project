@@ -4,7 +4,7 @@
 
     <div class="dashboard-grid">
       <div class="stat-card card">
-        <div class="stat-icon">📊</div>
+        <div class="stat-icon"><Icon name="database" :size="28" color="#0284c7" /></div>
         <div class="stat-content">
           <div class="stat-value">{{ stats.dataSourceCount || 0 }}</div>
           <div class="stat-label">数据源</div>
@@ -12,7 +12,7 @@
       </div>
 
       <div class="stat-card card">
-        <div class="stat-icon">📈</div>
+        <div class="stat-icon"><Icon name="chart" :size="28" color="#0284c7" /></div>
         <div class="stat-content">
           <div class="stat-value">{{ stats.observationDataCount || 0 }}</div>
           <div class="stat-label">观测数据</div>
@@ -20,7 +20,7 @@
       </div>
 
       <div class="stat-card card">
-        <div class="stat-icon">🌊</div>
+        <div class="stat-icon"><Icon name="scene" :size="28" color="#0284c7" /></div>
         <div class="stat-content">
           <div class="stat-value">{{ stats.sceneCount || 0 }}</div>
           <div class="stat-label">可视化场景</div>
@@ -28,7 +28,7 @@
       </div>
 
       <div class="stat-card card">
-        <div class="stat-icon">📉</div>
+        <div class="stat-icon"><Icon name="trendDown" :size="28" color="#0284c7" /></div>
         <div class="stat-content">
           <div class="stat-value">{{ stats.chartCount || 0 }}</div>
           <div class="stat-label">图表配置</div>
@@ -40,7 +40,7 @@
       <h3 class="section-title">快速入口</h3>
       <ul class="feature-list">
         <li>
-          <span class="feature-icon">🗄️</span>
+          <span class="feature-icon"><Icon name="database" :size="22" color="#0284c7" /></span>
           <div>
             <strong>数据源管理</strong>
             <p class="muted">管理NOAA、ERDDAP等数据源配置</p>
@@ -50,7 +50,7 @@
           </router-link>
         </li>
         <li>
-          <span class="feature-icon">📈</span>
+          <span class="feature-icon"><Icon name="chart" :size="22" color="#0284c7" /></span>
           <div>
             <strong>观测数据</strong>
             <p class="muted">查看和管理海洋观测数据</p>
@@ -60,7 +60,7 @@
           </router-link>
         </li>
         <li>
-          <span class="feature-icon">🌊</span>
+          <span class="feature-icon"><Icon name="scene" :size="22" color="#0284c7" /></span>
           <div>
             <strong>场景管理</strong>
             <p class="muted">创建和管理3D可视化场景</p>
@@ -70,7 +70,7 @@
           </router-link>
         </li>
         <li>
-          <span class="feature-icon">📉</span>
+          <span class="feature-icon"><Icon name="trendDown" :size="22" color="#0284c7" /></span>
           <div>
             <strong>图表配置</strong>
             <p class="muted">配置ECharts图表和数据查询</p>
@@ -87,6 +87,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import PageHeader from '@/components/PageHeader.vue';
+import Icon from '@/components/Icon.vue';
 import { dataSourceApi, observationDataApi, visualizationSceneApi, chartConfigApi } from '@/utils/api-admin';
 
 const stats = ref({
@@ -181,8 +182,15 @@ onMounted(() => {
 }
 
 .stat-icon {
-  font-size: 40px;
-  filter: drop-shadow(0 2px 8px rgba(102, 126, 234, 0.3));
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(2, 132, 199, 0.12);
+  border: 1px solid rgba(2, 132, 199, 0.24);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: none;
   position: relative;
   z-index: 1;
 }
@@ -272,8 +280,15 @@ onMounted(() => {
 }
 
 .feature-icon {
-  font-size: 32px;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(2, 132, 199, 0.1);
+  border: 1px solid rgba(2, 132, 199, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: none;
 }
 
 .feature-list li strong {
@@ -292,6 +307,66 @@ onMounted(() => {
   line-height: 1.5;
 }
 
+/* 浅色主色覆盖 */
+.stat-card {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.14), rgba(6, 182, 212, 0.1));
+  border-color: rgba(2, 132, 199, 0.24);
+
+  &:hover {
+    box-shadow: 0 12px 24px -16px rgba(2, 132, 199, 0.5);
+    border-color: rgba(2, 132, 199, 0.35);
+  }
+}
+
+.stat-card::before {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(6, 182, 212, 0.08));
+}
+
+.stat-icon {
+  filter: none;
+}
+
+.stat-value {
+  color: #0f172a;
+  text-shadow: none;
+}
+
+.stat-label {
+  color: #475569;
+}
+
+.section-title {
+  color: #0f172a;
+  border-bottom-color: #dbe8f4;
+}
+
+.feature-list li {
+  background: #f8fbff;
+  border-color: #dbe8f4;
+
+  &:hover {
+    background: #f0f9ff;
+    border-color: #bae6fd;
+    box-shadow: 0 8px 22px -16px rgba(2, 132, 199, 0.45);
+  }
+}
+
+.feature-list li::before {
+  background: linear-gradient(135deg, #0284c7, #06b6d4);
+}
+
+.feature-icon {
+  filter: none;
+}
+
+.feature-list li strong {
+  color: #0f172a;
+}
+
+.feature-list li .muted {
+  color: #64748b;
+}
+
 // 响应式设计
 @media (max-width: 768px) {
   .dashboard-grid {
@@ -304,7 +379,8 @@ onMounted(() => {
   }
 
   .stat-icon {
-    font-size: 32px;
+    width: 44px;
+    height: 44px;
   }
 
   .stat-value {

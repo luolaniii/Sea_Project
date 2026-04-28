@@ -7,6 +7,89 @@
     </PageHeader>
 
     <div class="card">
+      <div class="filter-toolbar">
+        <div class="filter-item">
+          <label>场景名称</label>
+          <input
+            v-model="filterSceneName"
+            type="text"
+            class="search-input"
+            placeholder="输入场景名称"
+            @keyup.enter="handleSearch"
+          />
+        </div>
+        <div class="filter-item">
+          <label>场景类型</label>
+          <select v-model="filterSceneType" class="filter-select" @change="handleFilterChange">
+            <option value="">全部场景类型</option>
+            <option value="OCEAN_3D">3D 海洋</option>
+            <option value="CHART_2D">2D 图表</option>
+            <option value="COMPOSITE">复合场景</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>公开状态</label>
+          <select v-model="filterIsPublic" class="filter-select" @change="handleFilterChange">
+            <option value="">全部状态</option>
+            <option value="YES">公开</option>
+            <option value="NO">私有</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>站点关键词</label>
+          <input
+            v-model="filterStationKeyword"
+            type="text"
+            class="search-input"
+            placeholder="站点名或站点ID"
+            @keyup.enter="handleSearch"
+          />
+        </div>
+        <div class="filter-item">
+          <label>站点类型</label>
+          <select v-model="filterStationType" class="filter-select" @change="handleFilterChange">
+            <option value="">全部站点类型</option>
+            <option v-for="t in stationTypeOptions" :key="t.value" :value="t.value">{{ t.label }}</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>海域</label>
+          <select v-model="filterOceanRegion" class="filter-select" @change="handleFilterChange">
+            <option value="">全部海域</option>
+            <option v-for="o in oceanOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>数据类型</label>
+          <select v-model="filterDataTypeCode" class="filter-select" @change="handleFilterChange">
+            <option value="">全部数据类型</option>
+            <option v-for="type in dataTypeList" :key="String(type.id)" :value="type.typeCode">
+              {{ type.typeCode }} - {{ type.typeName }}
+            </option>
+          </select>
+        </div>
+        <div class="filter-item coord-item">
+          <label>经度范围</label>
+          <div class="coord-range">
+            <input v-model.number="filterMinLongitude" type="number" class="search-input" placeholder="最小经度" />
+            <span>~</span>
+            <input v-model.number="filterMaxLongitude" type="number" class="search-input" placeholder="最大经度" />
+          </div>
+        </div>
+        <div class="filter-item coord-item">
+          <label>纬度范围</label>
+          <div class="coord-range">
+            <input v-model.number="filterMinLatitude" type="number" class="search-input" placeholder="最小纬度" />
+            <span>~</span>
+            <input v-model.number="filterMaxLatitude" type="number" class="search-input" placeholder="最大纬度" />
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-primary" @click="handleSearch">搜索</button>
+          <button class="btn btn-default" @click="handleResetFilters">重置</button>
+        </div>
+      </div>
+
       <DataTable
         :columns="columns"
         :data="tableData"
@@ -154,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import PageHeader from '@/components/PageHeader.vue';
 import DataTable from '@/components/DataTable.vue';
 import Pagination from '@/components/Pagination.vue';
@@ -190,6 +273,17 @@ const loading = ref(false);
 const pageNum = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
+const filterSceneName = ref('');
+const filterSceneType = ref('');
+const filterIsPublic = ref('');
+const filterStationKeyword = ref('');
+const filterStationType = ref('');
+const filterOceanRegion = ref('');
+const filterDataTypeCode = ref('');
+const filterMinLongitude = ref<number | undefined>(undefined);
+const filterMaxLongitude = ref<number | undefined>(undefined);
+const filterMinLatitude = ref<number | undefined>(undefined);
+const filterMaxLatitude = ref<number | undefined>(undefined);
 
 const modalVisible = ref(false);
 const modalTitle = ref('新增场景');
@@ -206,6 +300,48 @@ const editingId = ref<string | number | null>(null);
 // 数据源 & 数据类型列表（用于 dataQuery 下拉）
 const dataSourceList = ref<DataSource[]>([]);
 const dataTypeList = ref<ObservationDataType[]>([]);
+const stationTypeLabelMap: Record<string, string> = {
+  MET: '标准气象观测站',
+  WAVE: '波浪谱观测站',
+  OCEAN: '海洋水质观测站',
+  DART: 'DART 海啸/水柱高度站',
+  CURRENT: '海流剖面观测站',
+  WATER_LEVEL: '潮位/水位观测站',
+  NOAA: 'NOAA NDBC 站点',
+  ERDDAP: 'ERDDAP 科学数据站',
+  CUSTOM: '自定义站点',
+};
+
+const oceanOptions = [
+  { value: 'PACIFIC', label: '太平洋' },
+  { value: 'ATLANTIC', label: '大西洋' },
+  { value: 'INDIAN', label: '印度洋' },
+  { value: 'ARCTIC', label: '北冰洋' },
+  { value: 'SOUTHERN', label: '南冰洋' },
+  { value: 'GULF_OF_MEXICO', label: '墨西哥湾' },
+  { value: 'GREAT_LAKES', label: '五大湖' },
+];
+
+const getStationTypeCode = (ds: any): string => {
+  const suffix = String(ds?.fileSuffixes || '').toLowerCase();
+  const config = String(ds?.configJson || '').toLowerCase();
+  if (suffix.includes('dart') || config.includes('"dart":true') || config.includes('"dart":"y"')) return 'DART';
+  if (suffix.includes('adcp') || config.includes('"currents":true') || config.includes('"currents":"y"')) return 'CURRENT';
+  if (suffix.includes('tide') || suffix.includes('wlevel')) return 'WATER_LEVEL';
+  if (suffix.includes('spec') || suffix.includes('data_spec') || suffix.includes('swden')) return 'WAVE';
+  if (suffix.includes('ocean') || config.includes('"waterquality":true') || config.includes('"waterquality":"y"')) return 'OCEAN';
+  if (suffix.includes('txt') || suffix.includes('cwind') || suffix.includes('rain') || suffix.includes('srad') || config.includes('"met":true') || config.includes('"met":"y"')) return 'MET';
+  return String(ds?.sourceType || '').trim().toUpperCase();
+};
+
+const stationTypeOptions = computed(() => {
+  const set = new Set<string>();
+  dataSourceList.value.forEach((ds) => {
+    const t = getStationTypeCode(ds);
+    if (t) set.add(t);
+  });
+  return Array.from(set).map((value) => ({ value, label: stationTypeLabelMap[value] || value }));
+});
 
 // dataQuery 配置（会被序列化到 configJson.dataQuery）
 const dataQuery = ref<{
@@ -291,6 +427,17 @@ const loadData = async () => {
     const res = await visualizationSceneApi.page({
       pageNum: pageNum.value,
       pageSize: pageSize.value,
+      sceneName: filterSceneName.value.trim() || undefined,
+      sceneType: filterSceneType.value || undefined,
+      isPublic: filterIsPublic.value || undefined,
+      stationKeyword: filterStationKeyword.value.trim() || undefined,
+      stationType: filterStationType.value || undefined,
+      oceanRegion: filterOceanRegion.value || undefined,
+      dataTypeCode: filterDataTypeCode.value || undefined,
+      minLongitude: filterMinLongitude.value,
+      maxLongitude: filterMaxLongitude.value,
+      minLatitude: filterMinLatitude.value,
+      maxLatitude: filterMaxLatitude.value,
     });
     tableData.value = res.list;
     total.value = res.total;
@@ -306,6 +453,32 @@ const loadData = async () => {
 
 const handlePageSizeChange = () => {
   pageNum.value = 1; // 页大小改变时重置到第一页
+  loadData();
+};
+
+const handleSearch = () => {
+  pageNum.value = 1;
+  loadData();
+};
+
+const handleFilterChange = () => {
+  pageNum.value = 1;
+  loadData();
+};
+
+const handleResetFilters = () => {
+  filterSceneName.value = '';
+  filterSceneType.value = '';
+  filterIsPublic.value = '';
+  filterStationKeyword.value = '';
+  filterStationType.value = '';
+  filterOceanRegion.value = '';
+  filterDataTypeCode.value = '';
+  filterMinLongitude.value = undefined;
+  filterMaxLongitude.value = undefined;
+  filterMinLatitude.value = undefined;
+  filterMaxLatitude.value = undefined;
+  pageNum.value = 1;
   loadData();
 };
 
@@ -438,6 +611,64 @@ onMounted(() => {
   animation: slideUp 0.5s ease-out 0.2s both;
 }
 
+.filter-toolbar {
+  padding: 16px 18px;
+  border-bottom: 1px solid #e2e8f0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-size: 12px;
+    color: #334155;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+}
+
+.filter-select,
+.search-input {
+  width: 100%;
+  height: 38px;
+  border: 1px solid #dbe8f4;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: #334155;
+  background: #fff;
+  font-size: 13px;
+
+  &:focus {
+    outline: none;
+    border-color: rgba(2, 132, 199, 0.45);
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
+  }
+}
+
+.coord-item .coord-range {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 6px;
+  align-items: center;
+
+  span {
+    color: #64748b;
+    font-size: 12px;
+  }
+}
+
+.filter-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-self: end;
+}
+
 @keyframes slideUp {
   from {
     opacity: 0;
@@ -458,7 +689,7 @@ onMounted(() => {
       margin-bottom: 8px;
       font-size: 14px;
       font-weight: 500;
-      color: rgba(255, 255, 255, 0.9);
+      color: #334155;
       letter-spacing: 0.2px;
     }
 
@@ -468,7 +699,7 @@ onMounted(() => {
       transition: all 0.3s;
 
       &:focus {
-        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+        box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.14);
       }
     }
 
@@ -477,36 +708,40 @@ onMounted(() => {
       appearance: none;
       -webkit-appearance: none;
       -moz-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364758b' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 12px center;
       padding-right: 36px;
-      color-scheme: dark;
+      color-scheme: light;
       
       &::-ms-expand {
         display: none;
       }
       
       option {
-        background: rgba(15, 20, 45, 0.98) !important;
-        background-color: rgba(15, 20, 45, 0.98) !important;
-        color: #fff !important;
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+        color: #0f172a !important;
         padding: 10px 14px;
       }
       
       option:checked {
-        background: rgba(102, 126, 234, 0.5) !important;
-        background-color: rgba(102, 126, 234, 0.5) !important;
-        color: #fff !important;
+        background: #e0f2fe !important;
+        background-color: #e0f2fe !important;
+        color: #0c4a6e !important;
       }
       
       option:hover,
       option:focus {
-        background: rgba(102, 126, 234, 0.4) !important;
-        background-color: rgba(102, 126, 234, 0.4) !important;
-        color: #fff !important;
+        background: #f0f9ff !important;
+        background-color: #f0f9ff !important;
+        color: #0f172a !important;
       }
     }
+  }
+
+  .range-separator {
+    color: #64748b;
   }
 }
 </style>

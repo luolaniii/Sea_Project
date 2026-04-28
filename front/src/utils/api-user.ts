@@ -46,8 +46,24 @@ export interface VisualizationScene {
 export interface DataSourceItem {
   id?: string | number;
   sourceName?: string;
+  sourceType?: string;
+  stationType?: string;
+  stationTypeDesc?: string;
   stationId?: string;
+  apiUrl?: string;
+  officialUrl?: string;
+  longitude?: number;
+  latitude?: number;
+  fileSuffixes?: string;
+  autoSync?: number;
   status?: number;
+}
+
+export interface BuoyCamImageInfo {
+  available: boolean;
+  pageUrl?: string;
+  imageUrl?: string;
+  message?: string;
 }
 
 /**
@@ -324,6 +340,13 @@ export const userApi = {
   },
 
   /**
+   * 解析 NDBC BuoyCAM 页面中的真实图片地址。失败时后端返回 available=false。
+   */
+  getBuoyCamImage: (dataSourceId: string | number): Promise<BuoyCamImageInfo> => {
+    return http.get(`/user/data-source/${toPathId(dataSourceId)}/buoycam-image`);
+  },
+
+  /**
    * 用户首页统计：场景/图表/观测数据条数
    */
   getUserStats: (): Promise<{ sceneCount: number; chartCount: number; dataCount: number }> => {
@@ -337,10 +360,17 @@ export const userApi = {
     id: number | string;
     stationId: string;
     name: string;
+    sourceType?: string;
+    stationType?: string;
+    stationTypeDesc?: string;
     longitude: number;
     latitude: number;
     description?: string;
     fileSuffixes?: string;
+    apiUrl?: string;
+    officialUrl?: string;
+    autoSync?: number;
+    hasWaveData?: boolean;
     chartCount: number;
     sceneCount: number;
     charts: Array<{ id: number | string; name: string }>;
@@ -476,6 +506,8 @@ export const userApi = {
     keyword?: string;
     postType?: string;
     reliabilityStatus?: number;
+    evaluationCompleted?: boolean;
+    reliabilityTrusted?: boolean;
   }): Promise<PageBean<ForumPost>> => {
     return http.get('/user/forum-post/page', { params });
   },
@@ -575,6 +607,8 @@ export const userApi = {
     keyword?: string;
     postType?: string;
     reliabilityStatus?: number;
+    evaluationCompleted?: boolean;
+    reliabilityTrusted?: boolean;
   }): Promise<PageBean<ForumPost>> => {
     return http.get('/user/forum-post/my', { params });
   },
@@ -682,5 +716,29 @@ export const userApi = {
 
   addExpertAnswer: (payload: ExpertAnswer): Promise<ExpertAnswer> => {
     return http.post('/user/expert-answer', stringifyBodyLongIdFields({ ...payload } as Record<string, unknown>));
+  },
+};
+
+/**
+ * 账户相关：头像上传 / 获取最新资料
+ */
+export const accountApi = {
+  /**
+   * 获取当前登录用户最新资料（含头像）
+   */
+  getMe: (): Promise<{ id: string | number; username: string; role: string; avatar?: string; token?: string }> => {
+    return http.get('/user/account/me');
+  },
+
+  /**
+   * 上传头像（multipart/form-data）
+   * 返回 { avatar: '/uploads/avatar/xxx.png' }
+   */
+  uploadAvatar: (file: File): Promise<{ avatar: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return http.post('/user/account/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
   },
 };

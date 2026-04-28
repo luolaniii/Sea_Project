@@ -1,22 +1,97 @@
 <template>
   <div class="user-scene-view">
-    <div v-if="loading" class="loading">加载中...</div>
-    <div v-else-if="scene" class="scene-container">
-      <div class="scene-header">
-        <div class="scene-header-top">
-          <button class="btn-back" @click="handleBack">
-            <span class="back-icon">←</span>
-            <span>返回</span>
-          </button>
+    <div v-if="loading" class="state state-loading">
+      <div class="state-card">
+        <div class="state-spinner"></div>
+        <p>正在加载场景数据…</p>
+      </div>
+    </div>
+    <template v-else-if="scene">
+      <header class="scene-header">
+        <button class="btn-back" @click="handleBack">
+          <span class="back-arrow">←</span>
+          <span>返回画廊</span>
+        </button>
+        <div class="scene-title-row">
+          <span class="scene-tag">{{ scene.sceneType }}</span>
+          <h1 class="scene-title">{{ scene.sceneName }}</h1>
         </div>
-        <h1 class="scene-title">{{ scene.sceneName }}</h1>
         <p class="scene-description">{{ scene.description || '暂无描述' }}</p>
         <div class="scene-meta">
-          <span class="scene-type">{{ scene.sceneType }}</span>
-          <span class="scene-views"><Icon name="eye" :size="13" /> {{ scene.viewCount || 0 }}</span>
+          <span class="meta-item">
+            <Icon name="eye" :size="13" />
+            浏览 {{ scene.viewCount || 0 }} 次
+          </span>
+          <span v-if="sourceLabel" class="meta-item meta-source">
+            <span class="source-dot"></span>
+            <Icon name="signal" :size="12" />
+            {{ sourceLabel }}
+          </span>
+          <span v-if="sceneData.length" class="meta-item">
+            <Icon name="chart" :size="12" />
+            {{ sceneData.length }} 条观测点
+          </span>
         </div>
-      </div>
-      <!-- 回放条放在标题区下方、3D 区上方，避免被画布区域 overflow/高度挤压到视口外 -->
+        <div v-if="stationCtx" class="scene-jump">
+          <span class="meta-item station-type">
+            <Icon name="database" :size="12" />
+            {{ stationCtx.stationTypeDesc }}
+          </span>
+          <button class="jump-btn" :disabled="!stationCtx.chartId" @click="goToChart">
+            <Icon name="chart" :size="13" /> 图表页
+          </button>
+          <button class="jump-btn" @click="goToAi">
+            <Icon name="brain" :size="13" /> AI 分析
+          </button>
+          <button class="jump-btn" :disabled="!stationCtx.sceneId" @click="goToSceneGallery">
+            <Icon name="scene" :size="13" /> 场景画廊
+          </button>
+          <button class="jump-btn jump-ghost" :disabled="!stationCtx.officialUrl" @click="openOfficial">
+            <Icon name="external" :size="13" /> 站点官网
+          </button>
+          <button class="jump-btn jump-ghost" :disabled="!stationCtx.historyUrl" @click="openHistory">
+            <Icon name="database" :size="13" /> 历史数据
+          </button>
+          <button class="jump-btn jump-ghost" :disabled="!stationCtx.buoyCamUrl" @click="openBuoyCam">
+            <Icon name="eye" :size="13" /> 现场图片
+          </button>
+        </div>
+      </header>
+
+      <!-- 现场图像：BuoyCAM 页面可打开；解析到真实图片时再内联展示 -->
+      <aside v-if="stationCtx?.buoyCamUrl" class="buoy-cam-card">
+        <div class="cam-header">
+          <Icon name="eye" :size="14" :color="'#0284c7'" />
+          <strong>现场图像 · BuoyCAM</strong>
+          <span class="cam-station">{{ stationCtx.stationId || stationCtx.stationName }}</span>
+          <a :href="stationCtx.buoyCamUrl" target="_blank" rel="noopener" class="cam-open">在 NDBC 打开</a>
+        </div>
+        <div v-if="buoyCam.loading" class="cam-placeholder">正在检查 NDBC 现场图片…</div>
+        <img
+          v-else-if="buoyCam.available && buoyCam.imageUrl"
+          :src="buoyCam.imageUrl"
+          :alt="`BuoyCAM ${stationCtx.stationId}`"
+          class="cam-image"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          @error="hideBuoyCamImage"
+        />
+        <img
+          v-else-if="buoyCam.tryDirect && stationCtx?.buoyCamUrl"
+          :src="stationCtx.buoyCamUrl"
+          :alt="`BuoyCAM ${stationCtx.stationId}`"
+          class="cam-image"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          @load="markDirectBuoyCamLoaded"
+          @error="hideDirectBuoyCam"
+        />
+        <div v-else class="cam-placeholder">
+          {{ buoyCam.message || '该站点暂无可内联展示的 BuoyCAM 图片，可在 NDBC 打开查看。' }}
+        </div>
+        <p class="cam-tip">BuoyCAM 仅在白天定时拍摄，部分站点未安装相机</p>
+      </aside>
+
       <div v-if="replayRange.valid" class="scene-replay-bar-host">
         <TimeReplayBar
           v-model="replayTimeMs"
@@ -25,20 +100,41 @@
         />
       </div>
       <p v-else-if="sceneData.length > 0" class="replay-unavailable-hint">
-        当前数据无法解析观测时间，历史回放不可用（请确认接口返回 observationTime 为可解析时间）
+        当前数据无法解析观测时间，历史回放不可用
       </p>
-      <div class="scene-content">
-        <div class="scene-viewer-wrap">
-          <Scene3DViewer
-            :config-json="scene.configJson"
-            :data="sceneData"
-            :source-label="sourceLabel"
-            :replay-end-time="replayRange.valid ? replayEndTimeStr : undefined"
-          />
+
+      <section v-if="volatileSegments.length" class="scene-volatility">
+        <div class="volatility-title">
+          <strong>剧烈变化时间段</strong>
+          <span>基于当前回放时间点最近 24 小时，按 异常预警 / 稳定性 / 舒适度 / 短期趋势 分类</span>
         </div>
+        <div class="volatility-list">
+          <div v-for="seg in volatileSegments" :key="`${seg.typeCode}-${seg.startTime}-${seg.endTime}`" :class="['volatility-item', seg.level]">
+            <span class="metric">{{ seg.typeLabel }}</span>
+            <span class="time">{{ seg.startTime }} ~ {{ seg.endTime }}</span>
+            <span class="delta">变化 {{ seg.delta }}</span>
+            <span class="values">{{ seg.fromValue }} → {{ seg.toValue }}</span>
+            <span v-for="tag in seg.analyses" :key="tag" :class="['analysis-tag', `tag-${tagSlug(tag)}`]">{{ tag }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene-stage">
+        <Scene3DViewer
+          :key="sceneRenderKey"
+          :config-json="scene.configJson"
+          :data="sceneData"
+          :source-label="sourceLabel"
+          :replay-end-time="replayRange.valid ? replayEndTimeStr : undefined"
+        />
+      </section>
+    </template>
+    <div v-else class="state state-error">
+      <div class="state-card">
+        <p>场景不存在或已被移除</p>
+        <button class="btn-back" @click="handleBack">返回画廊</button>
       </div>
     </div>
-    <div v-else class="error">场景不存在</div>
   </div>
 </template>
 
@@ -52,6 +148,7 @@ import { userApi } from '@/utils/api-user';
 import { routeParamId } from '@/utils/path-id';
 import { parseJsonPreservingLongIds } from '@/utils/json-parse-ids';
 import { parseObservationTimeToMs } from '@/utils/observation-time';
+import { buildVolatileSegmentsFromObservations } from '@/utils/volatile-segments';
 
 const formatMsForApi = (ms: number): string => {
   const d = new Date(ms);
@@ -59,17 +156,16 @@ const formatMsForApi = (ms: number): string => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
 
-console.log('=== UserSceneView 组件脚本开始执行 ===');
-console.log('UserSceneView 导入完成');
-
 const route = useRoute();
 const router = useRouter();
 const scene = ref<any>(null);
 const sceneData = ref<any[]>([]);
 const loading = ref(true);
 const replayTimeMs = ref(0);
+const sceneRenderKey = computed(() => routeParamId(route.params.id));
+const mapStations = ref<any[]>([]);
+const mapStationsLoaded = ref(false);
 
-// 数据源标签：优先从观测数据中读取 dataSourceName，否则从配置/场景名推断
 const sourceLabel = computed<string>(() => {
   const list = sceneData.value || [];
   const hit = list.find((d: any) => d && d.dataSourceName);
@@ -102,6 +198,28 @@ const replayEndTimeStr = computed(() => {
   return formatMsForApi(ms);
 });
 
+const sceneDataRecent24h = computed(() => {
+  if (!replayRange.value.valid) return sceneData.value;
+  const endMs = Math.min(Math.max(replayTimeMs.value, replayRange.value.min), replayRange.value.max);
+  const startMs = endMs - 24 * 60 * 60 * 1000;
+  return (sceneData.value || []).filter((item: any) => {
+    const t = parseObservationTimeToMs(item.observationTime);
+    return !Number.isNaN(t) && t >= startMs && t <= endMs;
+  });
+});
+
+const volatileSegments = computed(() => buildVolatileSegmentsFromObservations(sceneDataRecent24h.value, { maxSegments: 8, maxPerType: 2 }));
+
+const tagSlug = (tag: string): string => {
+  switch (tag) {
+    case '异常预警': return 'alarm';
+    case '稳定性': return 'stability';
+    case '舒适度': return 'comfort';
+    case '短期趋势': return 'trend';
+    default: return 'other';
+  }
+};
+
 watch(
   () => replayRange.value,
   (r) => {
@@ -116,9 +234,6 @@ const handleBack = () => {
   router.push('/user/scene-gallery');
 };
 
-console.log('UserSceneView 变量初始化完成');
-
-// 解析场景 configJson（含 dataQuery 大整数 ID，禁止裸 JSON.parse）
 const parseSceneConfigRoot = (configJson?: string): any => {
   if (!configJson) return null;
   try {
@@ -129,22 +244,146 @@ const parseSceneConfigRoot = (configJson?: string): any => {
   }
 };
 
-// 加载场景数据
+const sceneDataSourceId = computed<string>(() => {
+  const root = parseSceneConfigRoot(scene.value?.configJson);
+  const id = root?.dataQuery?.dataSourceId;
+  if (id == null || String(id).trim() === '') return '';
+  return String(id).trim();
+});
+
+const stationCtx = computed(() => {
+  if (!sceneDataSourceId.value) return null;
+  const hit = mapStations.value.find((s: any) => String(s?.id) === sceneDataSourceId.value);
+  if (!hit) return null;
+  const charts = Array.isArray(hit.charts) ? hit.charts : [];
+  const scenes = Array.isArray(hit.scenes) ? hit.scenes : [];
+  return {
+    dataSourceId: String(hit.id),
+    stationId: hit.stationId ? String(hit.stationId) : '',
+    stationName: hit.name ? String(hit.name) : '',
+    stationTypeDesc: hit.stationTypeDesc || hit.sourceType || '未分类站点',
+    chartId: charts.length > 0 ? charts[0].id : null,
+    sceneId: scenes.length > 0 ? scenes[0].id : null,
+    officialUrl: String(hit.officialUrl || hit.apiUrl || '').trim(),
+    historyUrl: String(hit.historyUrl || '').trim(),
+    buoyCamUrl: String(hit.buoyCamUrl || '').trim(),
+  };
+});
+
+const buoyCam = ref({
+  loading: false,
+  available: false,
+  tryDirect: false,
+  imageUrl: '',
+  pageUrl: '',
+  message: '',
+});
+
+const loadBuoyCamImage = async () => {
+  const ctx = stationCtx.value;
+  if (!ctx?.dataSourceId || !ctx.buoyCamUrl) {
+    buoyCam.value = { loading: false, available: false, tryDirect: false, imageUrl: '', pageUrl: '', message: '' };
+    return;
+  }
+  buoyCam.value = { loading: true, available: false, tryDirect: false, imageUrl: '', pageUrl: ctx.buoyCamUrl, message: '' };
+  try {
+    const res = await userApi.getBuoyCamImage(ctx.dataSourceId);
+    buoyCam.value = {
+      loading: false,
+      available: !!res?.available && !!res?.imageUrl,
+      tryDirect: !res?.available || !res?.imageUrl,
+      imageUrl: res?.imageUrl || '',
+      pageUrl: res?.pageUrl || ctx.buoyCamUrl,
+      message: res?.message || '正在尝试直接加载 NDBC 现场图片…',
+    };
+  } catch (e) {
+    console.warn('解析 BuoyCAM 图片失败:', e);
+    buoyCam.value = {
+      loading: false,
+      available: false,
+      tryDirect: true,
+      imageUrl: '',
+      pageUrl: ctx.buoyCamUrl,
+      message: '正在尝试直接加载 NDBC 现场图片…',
+    };
+  }
+};
+
+const hideBuoyCamImage = () => {
+  buoyCam.value = {
+    ...buoyCam.value,
+    available: false,
+    tryDirect: true,
+    imageUrl: '',
+    message: '正在尝试直接加载 NDBC 现场图片…',
+  };
+};
+
+const markDirectBuoyCamLoaded = () => {
+  buoyCam.value = { ...buoyCam.value, loading: false, tryDirect: true, message: '' };
+};
+
+const hideDirectBuoyCam = () => {
+  buoyCam.value = {
+    ...buoyCam.value,
+    loading: false,
+    available: false,
+    tryDirect: false,
+    imageUrl: '',
+    message: '现场图片无法内联加载，可在 NDBC 打开查看。',
+  };
+};
+
+watch(() => stationCtx.value?.dataSourceId, () => { loadBuoyCamImage(); });
+
+const loadMapStations = async () => {
+  if (mapStationsLoaded.value) return;
+  try {
+    mapStations.value = await userApi.getMapStations();
+    mapStationsLoaded.value = true;
+  } catch (e) {
+    console.error('加载站点映射失败:', e);
+    mapStations.value = [];
+  }
+};
+
+const goToChart = () => {
+  if (!stationCtx.value?.chartId) return;
+  router.push(`/user/chart/${encodeURIComponent(String(stationCtx.value.chartId))}`);
+};
+
+const goToAi = () => {
+  if (!stationCtx.value?.dataSourceId) return;
+  router.push({ path: '/user/ocean-analysis', query: { dataSourceId: stationCtx.value.dataSourceId } });
+};
+
+const goToSceneGallery = () => {
+  router.push('/user/scene-gallery');
+};
+
+const openOfficial = () => {
+  const url = stationCtx.value?.officialUrl;
+  if (!url) return;
+  window.open(url, '_blank');
+};
+
+const openBuoyCam = () => {
+  const url = stationCtx.value?.buoyCamUrl;
+  if (!url) return;
+  window.open(url, '_blank');
+};
+
+const openHistory = () => {
+  const url = stationCtx.value?.historyUrl;
+  if (!url) return;
+  window.open(url, '_blank');
+};
+
 const loadSceneData = async (sceneId: string, configJson?: string) => {
   try {
-    console.log('=== 开始加载场景数据 ===');
-    console.log('sceneId:', sceneId);
-    console.log('configJson:', configJson);
-    
     const sceneConfig = parseSceneConfigRoot(configJson);
-    console.log('解析后的场景配置:', sceneConfig);
-    
-    const queryReq: any = {
-      pageNum: 1,
-      pageSize: 1000, // 默认查询1000条数据用于3D渲染
-    };
+    const queryReq: any = { pageNum: 1, pageSize: 5000 };
 
-    // 如果有配置，使用配置中的参数
     if (sceneConfig && sceneConfig.dataQuery) {
       const dataQuery = sceneConfig.dataQuery;
       if (dataQuery.dataSourceId) queryReq.dataSourceId = dataQuery.dataSourceId;
@@ -157,7 +396,6 @@ const loadSceneData = async (sceneId: string, configJson?: string) => {
       if (dataQuery.maxLatitude !== undefined) queryReq.maxLatitude = dataQuery.maxLatitude;
       if (dataQuery.pageSize) queryReq.pageSize = dataQuery.pageSize;
 
-      // 支持 dataQuery.time.mode/defaultHours 形式的相对时间范围
       if (!queryReq.startTime && !queryReq.endTime && dataQuery.time && dataQuery.time.mode === 'range') {
         const defaultHours = Number(dataQuery.time.defaultHours || 0);
         if (defaultHours > 0) {
@@ -175,11 +413,7 @@ const loadSceneData = async (sceneId: string, configJson?: string) => {
       }
     }
 
-    console.log('查询请求参数:', queryReq);
     const result = await userApi.getSceneData(sceneId, queryReq);
-    console.log('API返回结果:', result);
-    console.log('数据列表:', result.list);
-    console.log('数据数量:', result.list?.length || 0);
     return result.list || [];
   } catch (error) {
     console.error('加载场景数据失败:', error);
@@ -187,34 +421,28 @@ const loadSceneData = async (sceneId: string, configJson?: string) => {
   }
 };
 
-const sceneIdFromRoute = (): string => routeParamId(route.params.id);
+const sceneIdFromRoute = (): string => {
+  const raw = routeParamId(route.params.id);
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+};
 
 const loadScene = async () => {
-  console.log('=== loadScene 开始执行 ===');
   const sceneId = sceneIdFromRoute();
-  console.log('从路由获取的sceneId:', sceneId);
-
   if (!sceneId) {
-    console.warn('sceneId无效，停止加载');
+    scene.value = null;
+    sceneData.value = [];
     loading.value = false;
     return;
   }
-
   try {
     loading.value = true;
-    console.log('开始获取场景详情，sceneId:', sceneId);
     const data = await userApi.getSceneById(sceneId);
-    console.log('获取到的场景详情:', data);
     scene.value = data;
-
-    // 加载场景数据
     const dataList = await loadSceneData(sceneId, data.configJson);
-    console.log('=== 原始场景数据 ===');
-    console.log('数据量:', dataList.length);
-    console.log('第一条数据:', dataList[0]);
-    console.log('所有数据:', dataList);
-    
-    // 保留原始观测数据结构（包含 dataTypeCode 等关联字段），供 Scene3DViewer 按 layers.dataBindings 精准取数
     sceneData.value = (dataList || []).map((item: any) => {
       const lon = item.longitude != null ? Number(item.longitude) : item.longitude;
       const lat = item.latitude != null ? Number(item.latitude) : item.latitude;
@@ -228,194 +456,453 @@ const loadScene = async () => {
         depth: isNaN(dep) ? item.depth : dep,
       };
     });
-    
-    console.log('=== 处理后的场景数据 ===');
-    console.log('过滤后数据量:', sceneData.value.length);
-    console.log('第一条处理后的数据:', sceneData.value[0]);
-    console.log('所有处理后的数据:', sceneData.value);
   } catch (error) {
     console.error('加载场景失败:', error);
-    console.error('错误详情:', error);
+    scene.value = null;
+    sceneData.value = [];
   } finally {
     loading.value = false;
-    console.log('loadScene 执行完成，loading设置为false');
   }
 };
 
 onMounted(() => {
-  console.log('=== UserSceneView onMounted ===');
-  console.log('route.params:', route.params);
+  loadMapStations();
   loadScene();
 });
+
+watch(
+  () => route.params.id,
+  () => {
+    loadScene();
+  }
+);
 </script>
 
 <style scoped lang="less">
+@accent: #0284c7;
+@accent-soft: #7dd3fc;
+@ink-1: #0f172a;
+@ink-2: #334155;
+@ink-3: #64748b;
+@ink-4: #94a3b8;
+@hairline: #e2e8f0;
+@paper: #ffffff;
+@bg-soft: #f4f7fa;
+
 .user-scene-view {
   width: 100%;
-  min-height: 100vh;
+  min-height: calc(100vh - 64px);
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
-  position: relative;
-}
-
-.loading,
-.error {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 18px;
-  min-height: 400px;
-}
-
-.scene-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  gap: 18px;
+  margin: -32px;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 80% -10%, rgba(125, 211, 252, 0.3), transparent 55%),
+    radial-gradient(circle at 0% 100%, rgba(2, 132, 199, 0.08), transparent 50%),
+    linear-gradient(180deg, #f4f9ff 0%, #f4f7fa 100%);
   animation: fadeIn 0.5s ease-out;
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.state-card {
+  background: @paper;
+  border: 1px solid @hairline;
+  border-radius: 16px;
+  padding: 48px 64px;
+  text-align: center;
+  color: @ink-2;
+  font-size: 14px;
+  box-shadow: 0 6px 30px rgba(15, 23, 42, 0.06);
+
+  p { margin: 0 0 16px; }
+
+  .btn-back {
+    margin: 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    background: @accent;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+    &:hover { background: darken(@accent, 5%); }
   }
-  to {
-    opacity: 1;
-  }
+}
+
+.state-spinner {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 16px;
+  border: 3px solid rgba(2, 132, 199, 0.15);
+  border-top-color: @accent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .scene-header {
-  padding: 28px 32px;
-  background: rgba(15, 20, 45, 0.8);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(102, 126, 234, 0.2);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  position: relative;
-  z-index: 10;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
+  padding: 22px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.scene-header-top {
-  margin-bottom: 16px;
+.buoy-cam-card {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid @hairline;
+  border-radius: 14px;
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.05);
+
+  .cam-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: @ink-1;
+    font-family: 'Inter', sans-serif;
+
+    strong { font-weight: 700; letter-spacing: 0.1px; }
+    .cam-station {
+      padding: 2px 8px;
+      background: rgba(2, 132, 199, 0.08);
+      color: @accent;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+    }
+    .cam-open {
+      margin-left: auto;
+      font-size: 11.5px;
+      color: @ink-3;
+      text-decoration: none;
+      padding: 4px 10px;
+      border: 1px solid @hairline;
+      border-radius: 999px;
+      transition: all 0.18s;
+      &:hover { color: @accent; border-color: @accent-soft; background: rgba(2, 132, 199, 0.05); }
+    }
+  }
+  .cam-image {
+    width: 100%;
+    max-height: 320px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid @hairline;
+    background: #f0f7fd;
+  }
+  .cam-placeholder {
+    min-height: 74px;
+    border-radius: 10px;
+    border: 1px dashed #bae6fd;
+    background: #f0f9ff;
+    color: @ink-2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    font-size: 12.5px;
+    text-align: center;
+  }
+  .cam-tip {
+    margin: 0;
+    font-size: 11.5px;
+    color: @ink-3;
+    letter-spacing: 0.2px;
+  }
 }
 
 .btn-back {
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: rgba(102, 126, 234, 0.2);
-  border: 1px solid rgba(102, 126, 234, 0.4);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(2, 132, 199, 0.08);
+  border: 1px solid rgba(2, 132, 199, 0.2);
+  border-radius: 999px;
+  color: @accent;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.18s;
   font-family: inherit;
+  letter-spacing: 0.3px;
+
+  &:hover {
+    background: rgba(2, 132, 199, 0.14);
+    border-color: rgba(2, 132, 199, 0.35);
+    transform: translateX(-2px);
+  }
 }
 
-.btn-back:hover {
-  background: rgba(102, 126, 234, 0.3);
-  border-color: rgba(102, 126, 234, 0.6);
-  color: #fff;
-  transform: translateX(-2px);
+.back-arrow {
+  font-size: 14px;
+  font-weight: 700;
 }
 
-.back-icon {
-  font-size: 18px;
-  font-weight: bold;
+.scene-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.scene-tag {
+  padding: 3px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: @accent;
+  background: rgba(2, 132, 199, 0.08);
+  border: 1px solid rgba(2, 132, 199, 0.2);
+  border-radius: 4px;
 }
 
 .scene-title {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
-  color: #fff;
-  margin-bottom: 12px;
-  background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.9) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: 0.3px;
+  color: @ink-1;
+  letter-spacing: -0.3px;
+  margin: 0;
+  line-height: 1.2;
 }
 
 .scene-description {
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.75);
-  margin-bottom: 16px;
-  line-height: 1.6;
-  letter-spacing: 0.2px;
+  font-size: 14px;
+  color: @ink-3;
+  line-height: 1.65;
+  margin: 0;
+  max-width: 720px;
 }
 
 .scene-meta {
   display: flex;
   align-items: center;
-  gap: 20px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: @ink-3;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.4px;
 }
 
-.scene-type {
-  padding: 6px 14px;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
-  border-radius: 12px;
-  font-weight: 500;
-  border: 1px solid rgba(102, 126, 234, 0.4);
-}
-
-.scene-content {
-  flex: 1;
+.scene-jump {
   display: flex;
-  flex-direction: column;
-  position: relative;
-  overflow: hidden;
-  background: rgba(10, 14, 39, 0.5);
-  min-height: 600px;
-  height: calc(100vh - 200px);
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
-.scene-viewer-wrap {
-  flex: 1;
-  min-height: 0;
-  position: relative;
+.station-type {
+  background: #ecfeff;
+  border: 1px solid #a5f3fc;
+  border-radius: 999px;
+  padding: 6px 12px;
+  color: #0c4a6e;
+}
+
+.jump-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dbe8f4;
+  background: #f8fbff;
+  color: #0f172a;
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+
+  &:hover:not(:disabled) {
+    background: #e0f2fe;
+    border-color: #7dd3fc;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.jump-btn.jump-ghost {
+  background: #fff;
+  color: #475569;
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meta-source {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid @hairline;
+  border-radius: 999px;
+}
+
+.source-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+  flex-shrink: 0;
 }
 
 .scene-replay-bar-host {
-  flex-shrink: 0;
-  position: relative;
-  z-index: 25;
-  padding: 0 32px;
-  border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid @hairline;
+  border-radius: 12px;
+  padding: 10px 18px;
 }
 
 .replay-unavailable-hint {
-  flex-shrink: 0;
   margin: 0;
-  padding: 10px 32px;
+  padding: 10px 14px;
   font-size: 12px;
-  color: rgba(255, 200, 120, 0.85);
-  background: rgba(15, 20, 45, 0.95);
-  border-bottom: 1px solid rgba(255, 180, 80, 0.25);
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
 }
 
-// 响应式设计
-@media (max-width: 768px) {
-  .scene-header {
-    padding: 20px 24px;
-  }
+.scene-volatility {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid @hairline;
+  border-radius: 14px;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.05);
+}
 
-  .scene-replay-bar-host {
-    padding: 0 16px;
-  }
+.volatility-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
 
-  .scene-title {
-    font-size: 22px;
-  }
-
-  .scene-description {
+  strong {
+    color: @ink-1;
     font-size: 14px;
   }
+
+  span {
+    color: @ink-3;
+    font-size: 12px;
+  }
+}
+
+.volatility-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.volatility-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fbff;
+  border: 1px solid #dbe8f4;
+  color: @ink-2;
+  font-size: 12px;
+
+  &.high {
+    background: #fff7ed;
+    border-color: #fed7aa;
+  }
+
+  .metric {
+    grid-row: span 2;
+    align-self: center;
+    color: @accent;
+    font-weight: 700;
+  }
+
+  .time {
+    color: @ink-1;
+    font-weight: 600;
+  }
+
+  .delta,
+  .values {
+    color: @ink-3;
+  }
+
+  .analysis-tag {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: 2px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    border: 1px solid;
+    margin-right: 4px;
+  }
+  .tag-alarm { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+  .tag-stability { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+  .tag-comfort { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+  .tag-trend { background: #fefce8; color: #a16207; border-color: #fde68a; }
+}
+
+.scene-stage {
+  flex: 1;
+  min-height: 600px;
+  height: calc(100vh - 320px);
+  border-radius: 18px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid @hairline;
+  box-shadow: 0 24px 60px -20px rgba(2, 132, 199, 0.25);
+  background: #dceefa;
+}
+
+@media (max-width: 768px) {
+  .user-scene-view { padding: 20px; margin: -20px; }
+  .scene-header { padding: 18px 20px; }
+  .scene-title { font-size: 20px; }
+  .scene-stage { height: 70vh; min-height: 500px; }
 }
 </style>
-

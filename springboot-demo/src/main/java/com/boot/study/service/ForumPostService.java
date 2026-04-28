@@ -20,7 +20,7 @@ public interface ForumPostService extends BaseService<ForumPost> {
      * @param keyword  关键词（可选，搜索标题和内容）
      * @return 分页结果
      */
-    IPage<ForumPost> pagePosts(Page<ForumPost> page, String category, String keyword, String postType, Integer reliabilityStatus);
+    IPage<ForumPost> pagePosts(Page<ForumPost> page, String category, String keyword, String postType, Integer reliabilityStatus, Boolean evaluationCompleted, Boolean reliabilityTrusted);
 
     /**
      * 分页查询帖子列表（返回PageBean格式）
@@ -30,7 +30,7 @@ public interface ForumPostService extends BaseService<ForumPost> {
      * @param keyword  关键词（可选，搜索标题和内容）
      * @return 分页结果
      */
-    PageBean<ForumPost> pagePostsWithPageBean(Page<ForumPost> page, String category, String keyword, String postType, Integer reliabilityStatus);
+    PageBean<ForumPost> pagePostsWithPageBean(Page<ForumPost> page, String category, String keyword, String postType, Integer reliabilityStatus, Boolean evaluationCompleted, Boolean reliabilityTrusted);
 
     /**
      * 根据ID查询帖子详情（增加浏览量）
@@ -88,7 +88,7 @@ public interface ForumPostService extends BaseService<ForumPost> {
      * @param userId   用户ID
      * @return 分页结果
      */
-    IPage<ForumPost> pageMyPosts(Page<ForumPost> page, Long userId, String category, String keyword, String postType, Integer reliabilityStatus);
+    IPage<ForumPost> pageMyPosts(Page<ForumPost> page, Long userId, String category, String keyword, String postType, Integer reliabilityStatus, Boolean evaluationCompleted, Boolean reliabilityTrusted);
 
     /**
      * 分页查询当前用户的帖子列表（返回PageBean格式）
@@ -99,7 +99,7 @@ public interface ForumPostService extends BaseService<ForumPost> {
      * @param userId   用户ID
      * @return 分页结果
      */
-    PageBean<ForumPost> pageMyPostsWithPageBean(Page<ForumPost> page, Long userId, String category, String keyword, String postType, Integer reliabilityStatus);
+    PageBean<ForumPost> pageMyPostsWithPageBean(Page<ForumPost> page, Long userId, String category, String keyword, String postType, Integer reliabilityStatus, Boolean evaluationCompleted, Boolean reliabilityTrusted);
 
     /**
      * 更新帖子
@@ -141,6 +141,6 @@ public interface ForumPostService extends BaseService<ForumPost> {
      * @param status   状态（可选）
      * @return 分页结果
      */
-    PageBean<ForumPost> pagePostsForAdmin(Page<ForumPost> page, String category, String keyword, Integer status, String postType, Integer reliabilityStatus);
+    PageBean<ForumPost> pagePostsForAdmin(Page<ForumPost> page, String category, String keyword, Integer status, String postType, Integer reliabilityStatus, Boolean evaluationCompleted, Boolean reliabilityTrusted);
 }
 

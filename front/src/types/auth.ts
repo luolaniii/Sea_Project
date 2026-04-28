@@ -13,7 +13,9 @@ export interface UserInfo {
   /** 认证Token */
   token: string;
   /** 用户角色 */
-  role: 'admin' | 'user' | 'ADMIN' | 'USER';
+  role: 'admin' | 'user' | 'expert' | 'ADMIN' | 'USER' | 'EXPERT';
+  /** 头像 URL（如 /uploads/avatar/xxx.png） */
+  avatar?: string;
 }
 
 /**

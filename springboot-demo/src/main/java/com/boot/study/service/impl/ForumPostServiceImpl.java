@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -26,11 +27,14 @@ import java.util.List;
 @Service
 public class ForumPostServiceImpl extends BaseServiceImpl<ForumPostMapper, ForumPost> implements ForumPostService {
 
+    private static final int REQUIRED_EXPERT_EVALUATIONS = 3;
+    private static final BigDecimal RELIABILITY_PASS_SCORE = new BigDecimal("70");
+
     @Autowired
     private ForumCommentService forumCommentService;
 
     @Override
-    public IPage<ForumPost> pagePosts(Page<ForumPost> page, String category, String keyword, String postType, Integer reliabilityStatus) {
+    public IPage<ForumPost> pagePosts(Page<ForumPost> page, String category, String keyword, String postType, Integer reliabilityStatus, Boolean evaluationCompleted, Boolean reliabilityTrusted) {
         LambdaQueryWrapper<ForumPost> wrapper = new LambdaQueryWrapper<>();
         
         // 只查询已发布的帖子
@@ -46,6 +50,7 @@ public class ForumPostServiceImpl extends BaseServiceImpl<ForumPostMapper, Forum
         if (reliabilityStatus != null) {
             wrapper.eq(ForumPost::getReliabilityStatus, reliabilityStatus);
         }
+        applyEvaluationFilters(wrapper, evaluationCompleted, reliabilityTrusted);
         
         // 关键词搜索（标题或内容）
         if (StringUtils.hasText(keyword)) {
@@ -62,8 +67,8 @@ public class ForumPostServiceImpl extends BaseServiceImpl<ForumPostMapper, Forum
     }
 
     @Override
-    public PageBean<ForumPost> pagePostsWithPageBean(Page<ForumPost> page, String category, String keyword, String postType, Integer reliabilityStatus) {
-        IPage<ForumPost> iPage = pagePosts(page, category, keyword, postType, reliabilityStatus);
+    public PageBean<ForumPost> pagePostsWithPageBean(Page<ForumPost> page, String category, String keyword, String postType, Integer reliabilityStatus, Boolean evaluationCompleted, Boolean reliabilityTrusted) {
+        IPage<ForumPost> iPage = pagePosts(page, category, keyword, postType, reliabilityStatus, evaluationCompleted, reliabilityTrusted);
         return PageBean.page(iPage, iPage.getRecords());
     }
 
@@ -190,7 +195,7 @@ public class ForumPostServiceImpl extends BaseServiceImpl<ForumPostMapper, Forum
     }
 
     @Override
-    public IPage<ForumPost> pageMyPosts(Page<ForumPost> page, Long userId, String category, String keyword, String postType, Integer reliabilityStatus) {
+    public IPage<ForumPost> pageMyPosts(Page<ForumPost> page, Long userId, String category, String keyword, String postType, Integer reliabilityStatus, Boolean evaluationCompleted, Boolean reliabilityTrusted) {
         LambdaQueryWrapper<ForumPost> wrapper = new LambdaQueryWrapper<>();
         
         // 只查询当前用户的帖子
@@ -206,6 +211,7 @@ public class ForumPostServiceImpl extends BaseServiceImpl<ForumPostMapper, Forum
         if (reliabilityStatus != null) {
             wrapper.eq(ForumPost::getReliabilityStatus, reliabilityStatus);
         }
+        applyEvaluationFilters(wrapper, evaluationCompleted, reliabilityTrusted);
         
         // 关键词搜索（标题或内容）
         if (StringUtils.hasText(keyword)) {
@@ -221,8 +227,8 @@ public class ForumPostServiceImpl extends BaseServiceImpl<ForumPostMapper, Forum
     }
 
     @Override
-    public PageBean<ForumPost> pageMyPostsWithPageBean(Page<ForumPost> page, Long userId, String category, String keyword, String postType, Integer reliabilityStatus) {
-        IPage<ForumPost> iPage = pageMyPosts(page, userId, category, keyword, postType, reliabilityStatus);
+    public PageBean<ForumPost> pageMyPostsWithPageBean(Page<ForumPost> page, Long userId, String category, String keyword, String postType, Integer reliabilityStatus, Boolean evaluationCompleted, Boolean reliabilityTrusted) {
+        IPage<ForumPost> iPage = pageMyPosts(page, userId, category, keyword, postType, reliabilityStatus, evaluationCompleted, reliabilityTrusted);
         return PageBean.page(iPage, iPage.getRecords());
     }
 
@@ -281,7 +287,7 @@ public class ForumPostServiceImpl extends BaseServiceImpl<ForumPostMapper, Forum
     }
 
     @Override
-    public PageBean<ForumPost> pagePostsForAdmin(Page<ForumPost> page, String category, String keyword, Integer status, String postType, Integer reliabilityStatus) {
+    public PageBean<ForumPost> pagePostsForAdmin(Page<ForumPost> page, String category, String keyword, Integer status, String postType, Integer reliabilityStatus, Boolean evaluationCompleted, Boolean reliabilityTrusted) {
         LambdaQueryWrapper<ForumPost> wrapper = new LambdaQueryWrapper<>();
         
         // 管理端可以查看所有状态的帖子，不限制status
@@ -301,6 +307,7 @@ public class ForumPostServiceImpl extends BaseServiceImpl<ForumPostMapper, Forum
         if (reliabilityStatus != null) {
             wrapper.eq(ForumPost::getReliabilityStatus, reliabilityStatus);
         }
+        applyEvaluationFilters(wrapper, evaluationCompleted, reliabilityTrusted);
         
         // 关键词搜索（标题或内容）
         if (StringUtils.hasText(keyword)) {
@@ -315,6 +322,41 @@ public class ForumPostServiceImpl extends BaseServiceImpl<ForumPostMapper, Forum
         
         IPage<ForumPost> iPage = page(page, wrapper);
         return PageBean.page(iPage, iPage.getRecords());
+    }
+
+    /**
+     * 评估筛选标准：
+     * 1) 评估完成：evaluationCount >= 3
+     * 2) 评估可信：评估完成且 reliabilityStatus = 2（均分>=70）
+     */
+    private void applyEvaluationFilters(
+            LambdaQueryWrapper<ForumPost> wrapper,
+            Boolean evaluationCompleted,
+            Boolean reliabilityTrusted
+    ) {
+        if (evaluationCompleted != null) {
+            if (evaluationCompleted) {
+                wrapper.ge(ForumPost::getEvaluationCount, REQUIRED_EXPERT_EVALUATIONS);
+            } else {
+                wrapper.lt(ForumPost::getEvaluationCount, REQUIRED_EXPERT_EVALUATIONS);
+            }
+        }
+
+        if (reliabilityTrusted != null) {
+            if (reliabilityTrusted) {
+                // 可信 = 评估完成 且 状态已认证（内部标准：3位专家且均分>=70）
+                wrapper.ge(ForumPost::getEvaluationCount, REQUIRED_EXPERT_EVALUATIONS);
+                wrapper.eq(ForumPost::getReliabilityStatus, 2);
+                wrapper.ge(ForumPost::getReliabilityScore, RELIABILITY_PASS_SCORE);
+            } else {
+                // 不可信 = 评估完成 但未达到认证阈值
+                wrapper.ge(ForumPost::getEvaluationCount, REQUIRED_EXPERT_EVALUATIONS);
+                wrapper.and(w -> w
+                        .ne(ForumPost::getReliabilityStatus, 2)
+                        .or()
+                        .lt(ForumPost::getReliabilityScore, RELIABILITY_PASS_SCORE));
+            }
+        }
     }
 }
 

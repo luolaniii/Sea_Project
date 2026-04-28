@@ -35,5 +35,15 @@ public class ForumPostPageReq extends QueryReq {
      * 可靠性状态：0-未评选, 1-评选中, 2-已认证
      */
     private Integer reliabilityStatus;
+
+    /**
+     * 评估是否完成：true-已完成(>=3位专家), false-未完成(<3位专家)
+     */
+    private Boolean evaluationCompleted;
+
+    /**
+     * 评估是否可信：true-可信(已认证), false-不可信(已完成但未达阈值)
+     */
+    private Boolean reliabilityTrusted;
 }
 

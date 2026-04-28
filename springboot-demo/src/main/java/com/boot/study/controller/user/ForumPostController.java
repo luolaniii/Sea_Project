@@ -44,9 +44,19 @@ public class ForumPostController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String postType,
-            @RequestParam(required = false) Integer reliabilityStatus) {
+            @RequestParam(required = false) Integer reliabilityStatus,
+            @RequestParam(required = false) Boolean evaluationCompleted,
+            @RequestParam(required = false) Boolean reliabilityTrusted) {
         Page<ForumPost> pageParam = new Page<>(page, size);
-        PageBean<ForumPost> pageBean = forumPostService.pagePostsWithPageBean(pageParam, category, keyword, postType, reliabilityStatus);
+        PageBean<ForumPost> pageBean = forumPostService.pagePostsWithPageBean(
+                pageParam,
+                category,
+                keyword,
+                postType,
+                reliabilityStatus,
+                evaluationCompleted,
+                reliabilityTrusted
+        );
         return Result.success(pageBean);
     }
 
@@ -177,10 +187,21 @@ public class ForumPostController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String postType,
-            @RequestParam(required = false) Integer reliabilityStatus) {
+            @RequestParam(required = false) Integer reliabilityStatus,
+            @RequestParam(required = false) Boolean evaluationCompleted,
+            @RequestParam(required = false) Boolean reliabilityTrusted) {
         Long userId = LoginInfo.getUserId();
         Page<ForumPost> pageParam = new Page<>(page, size);
-        PageBean<ForumPost> pageBean = forumPostService.pageMyPostsWithPageBean(pageParam, userId, category, keyword, postType, reliabilityStatus);
+        PageBean<ForumPost> pageBean = forumPostService.pageMyPostsWithPageBean(
+                pageParam,
+                userId,
+                category,
+                keyword,
+                postType,
+                reliabilityStatus,
+                evaluationCompleted,
+                reliabilityTrusted
+        );
         return Result.success(pageBean);
     }
 }

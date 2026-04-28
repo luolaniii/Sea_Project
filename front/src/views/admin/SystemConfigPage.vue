@@ -259,7 +259,7 @@ onMounted(() => {
       margin-bottom: 8px;
       font-size: 14px;
       font-weight: 500;
-      color: rgba(255, 255, 255, 0.9);
+      color: #334155;
       letter-spacing: 0.2px;
     }
 
@@ -269,7 +269,7 @@ onMounted(() => {
       transition: all 0.3s;
 
       &:focus {
-        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+        box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.14);
       }
     }
 
@@ -278,34 +278,34 @@ onMounted(() => {
       appearance: none;
       -webkit-appearance: none;
       -moz-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364758b' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 12px center;
       padding-right: 36px;
-      color-scheme: dark;
+      color-scheme: light;
       
       &::-ms-expand {
         display: none;
       }
       
       option {
-        background: rgba(15, 20, 45, 0.98) !important;
-        background-color: rgba(15, 20, 45, 0.98) !important;
-        color: #fff !important;
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+        color: #0f172a !important;
         padding: 10px 14px;
       }
       
       option:checked {
-        background: rgba(102, 126, 234, 0.5) !important;
-        background-color: rgba(102, 126, 234, 0.5) !important;
-        color: #fff !important;
+        background: #e0f2fe !important;
+        background-color: #e0f2fe !important;
+        color: #0c4a6e !important;
       }
       
       option:hover,
       option:focus {
-        background: rgba(102, 126, 234, 0.4) !important;
-        background-color: rgba(102, 126, 234, 0.4) !important;
-        color: #fff !important;
+        background: #f0f9ff !important;
+        background-color: #f0f9ff !important;
+        color: #0f172a !important;
       }
     }
   }

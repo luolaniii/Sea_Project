@@ -112,7 +112,7 @@ body {
     border-color: @hairline;
     &:hover:not(:disabled) {
       background: #f8fafc;
-      border-color: @taupe-soft;
+      border-color: @accent-blue;
       color: @accent-blue;
     }
   }
@@ -142,6 +142,15 @@ select {
   &::placeholder {
     color: @ink-4;
   }
+}
+
+// 避免部分浏览器把自定义下拉箭头贴图重复渲染
+select {
+  appearance: menulist !important;
+  -webkit-appearance: menulist !important;
+  -moz-appearance: menulist !important;
+  background-image: none !important;
+  padding-right: 12px !important;
 }
 
 // ============ 卡片：大圆角 + 微阴影 ============

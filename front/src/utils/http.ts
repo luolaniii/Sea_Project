@@ -107,8 +107,11 @@ http.interceptors.response.use(
     // 如果code存在且不等于200，显示错误信息
     if (res.code !== undefined && res.code !== null && res.code !== 200) {
       const errorMsg = res.msg || res.message || '请求失败';
+      const silentError = Boolean((response.config as any)?.silentError);
       // 检查是否有特殊处理函数
-      if (specialCodeHandlers[res.code]) {
+      if (silentError) {
+        // 调用方明确要求静默失败，用于个人中心等非核心扩展信息容错加载
+      } else if (specialCodeHandlers[res.code]) {
         specialCodeHandlers[res.code](errorMsg, res.data);
       } else {
         message.error(errorMsg);
@@ -120,6 +123,7 @@ http.interceptors.response.use(
     return res.data !== undefined ? res.data : res;
   },
   (error) => {
+    const silentError = Boolean((error.config as any)?.silentError);
     if (error.response) {
       const { status, data } = error.response;
       if (status === 401) {
@@ -127,18 +131,18 @@ http.interceptors.response.use(
         authStore.logout();
         // 优先显示后端返回的错误信息
         const errorMsg = data?.msg || data?.message || '登录已过期，请重新登录';
-        message.error(errorMsg);
+        if (!silentError) message.error(errorMsg);
       } else {
         // 优先显示后端返回的错误信息
         const errorMsg = data?.msg || data?.message || `请求失败: ${status}`;
-        message.error(errorMsg);
+        if (!silentError) message.error(errorMsg);
       }
     } else if (error.request) {
       // 请求已发出但没有收到响应
-      message.error('网络错误，请检查网络连接');
+      if (!silentError) message.error('网络错误，请检查网络连接');
     } else {
       // 请求配置出错
-      message.error('请求配置错误');
+      if (!silentError) message.error('请求配置错误');
     }
     return Promise.reject(error);
   }

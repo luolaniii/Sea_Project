@@ -169,13 +169,13 @@ const handlePageSizeChange = (e: Event) => {
 </script>
 
 <style scoped lang="less">
-@hairline: #d8cebd;
-@taupe: #8d8576;
-@ink-1: #1c1814;
-@ink-2: #3a342c;
-@ink-3: #6e6759;
-@paper: #fbf7ee;
-@cream-tint: #e8e0cf;
+@hairline: #e2e8f0;
+@accent: #0284c7;
+@ink-1: #0f172a;
+@ink-2: #334155;
+@ink-3: #64748b;
+@paper: #ffffff;
+@bg-soft: #f8fafc;
 
 .pagination {
   display: flex;
@@ -195,9 +195,9 @@ const handlePageSizeChange = (e: Event) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 12.5px;
   color: @ink-3;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Inter', -apple-system, sans-serif;
 
   .info-text {
     white-space: nowrap;
@@ -221,24 +221,24 @@ const handlePageSizeChange = (e: Event) => {
   font-size: 12px;
   color: @ink-2;
   background: @paper;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236e6759' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   border: 1px solid @hairline;
-  border-radius: 4px;
+  border-radius: 6px;
   outline: none;
   cursor: pointer;
-  transition: all 0.22s;
+  transition: all 0.2s;
   appearance: none;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Inter', -apple-system, sans-serif;
 
   &::-ms-expand { display: none; }
 
-  &:hover { border-color: @taupe; }
+  &:hover { border-color: @accent; }
 
   &:focus {
-    border-color: @ink-2;
-    box-shadow: 0 0 0 3px rgba(28, 24, 20, 0.06);
+    border-color: @accent;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
   }
 
   option {
@@ -258,29 +258,28 @@ const handlePageSizeChange = (e: Event) => {
   align-items: center;
   justify-content: center;
   padding: 7px 14px;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 500;
   color: @ink-2;
-  background: transparent;
+  background: @paper;
   border: 1px solid @hairline;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.22s;
+  transition: all 0.2s;
   outline: none;
   white-space: nowrap;
-  font-family: 'JetBrains Mono', monospace;
-  letter-spacing: 0.4px;
+  font-family: 'Inter', -apple-system, sans-serif;
 
   &:hover:not(:disabled) {
-    background: @paper;
-    border-color: @taupe;
-    color: @ink-1;
+    background: @bg-soft;
+    border-color: @accent;
+    color: @accent;
   }
 
   &:active:not(:disabled) { transform: scale(0.98); }
 
   &:disabled {
-    opacity: 0.35;
+    opacity: 0.4;
     cursor: not-allowed;
   }
 
@@ -300,31 +299,31 @@ const handlePageSizeChange = (e: Event) => {
 }
 
 .page-info {
-  font-size: 12px;
+  font-size: 12.5px;
   color: @ink-3;
   white-space: nowrap;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Inter', -apple-system, sans-serif;
 }
 
 .page-input {
   width: 56px;
   padding: 6px 8px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   text-align: center;
   color: @ink-1;
   background: @paper;
   border: 1px solid @hairline;
-  border-radius: 4px;
+  border-radius: 6px;
   outline: none;
-  transition: all 0.22s;
-  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.2s;
+  font-family: 'Inter', -apple-system, sans-serif;
 
-  &:hover { border-color: @taupe; }
+  &:hover { border-color: @accent; }
 
   &:focus {
-    border-color: @ink-2;
-    box-shadow: 0 0 0 3px rgba(28, 24, 20, 0.06);
+    border-color: @accent;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
   }
 
   &::-webkit-inner-spin-button,

@@ -22,12 +22,15 @@ export const ROUTE_PATHS = {
     CHART_CONFIG: '/admin/chart-config',
     SYSTEM_CONFIG: '/admin/system-config',
     FORUM_POST: '/admin/forum-post',
+    EXPERT_APPLICATION: '/admin/expert-application',
+    RECHARGE: '/admin/recharge',
   },
-  
+
   // 用户端
   USER: {
     ROOT: '/user',
     HOME: '/user/home',
+    PROFILE: '/user/profile',
     SCENE_GALLERY: '/user/scene-gallery',
     CHART_GALLERY: '/user/chart-gallery',
     OCEAN_ANALYSIS: '/user/ocean-analysis',
@@ -36,6 +39,10 @@ export const ROUTE_PATHS = {
     FORUM_LIST: '/user/forum',
     FORUM_DETAIL: (id: string | number) => `/user/forum/${id}`,
     MY_POSTS: '/user/my-posts',
+    EXPERT_APPLY: '/user/expert-apply',
+    WALLET: '/user/wallet',
+    MEMBERSHIP: '/user/membership',
+    ORDERS: '/user/orders',
   },
 } as const;
 
@@ -53,6 +60,7 @@ export const ROUTE_NAMES = {
   ADMIN_SYSTEM_CONFIG: 'SystemConfigPage',
   ADMIN_FORUM_POST: 'ForumPostPage',
   USER_HOME: 'UserHome',
+  USER_PROFILE: 'UserProfile',
   USER_SCENE_GALLERY: 'UserSceneGallery',
   USER_CHART_GALLERY: 'UserChartGallery',
   USER_OCEAN_ANALYSIS: 'UserOceanAnalysis',
@@ -61,5 +69,11 @@ export const ROUTE_NAMES = {
   USER_FORUM_LIST: 'ForumList',
   USER_FORUM_DETAIL: 'ForumDetail',
   USER_MY_POSTS: 'MyPosts',
+  USER_EXPERT_APPLY: 'UserExpertApply',
+  USER_WALLET: 'UserWallet',
+  USER_MEMBERSHIP: 'UserMembership',
+  USER_ORDERS: 'UserOrders',
+  ADMIN_EXPERT_APPLICATION: 'ExpertApplicationPage',
+  ADMIN_RECHARGE: 'RechargeOrderPage',
 } as const;
 
