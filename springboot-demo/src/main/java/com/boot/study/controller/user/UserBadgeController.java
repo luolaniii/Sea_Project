@@ -8,15 +8,20 @@ import com.boot.study.enums.ResultEnum;
 import com.boot.study.exception.ServiceException;
 import com.boot.study.service.BadgeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
  * 用户端 - 徽章
+ *
+ * <p>未迁移 SQL 时返回空列表而非 500，避免页面弹"系统异常"。</p>
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/user/badge")
 @RequiredArgsConstructor
@@ -27,7 +32,12 @@ public class UserBadgeController {
     /** 全部启用徽章（含锁定状态） */
     @GetMapping("/catalog")
     public Result<List<Badge>> catalog() {
-        return Result.success(badgeService.listActive());
+        try {
+            return Result.success(badgeService.listActive());
+        } catch (Exception e) {
+            log.warn("徽章目录查询失败: {}", e.getMessage());
+            return Result.success(Collections.emptyList());
+        }
     }
 
     /** 我已获得的徽章 */
@@ -35,6 +45,11 @@ public class UserBadgeController {
     public Result<List<UserBadge>> mine() {
         Long userId = LoginInfo.getUserId();
         if (userId == null) throw new ServiceException(ResultEnum.NOT_TOKEN);
-        return Result.success(badgeService.listUserBadges(userId));
+        try {
+            return Result.success(badgeService.listUserBadges(userId));
+        } catch (Exception e) {
+            log.warn("用户徽章查询失败: {}", e.getMessage());
+            return Result.success(Collections.emptyList());
+        }
     }
 }

@@ -12,6 +12,7 @@ import com.boot.study.service.RechargeService;
 import com.boot.study.utils.PathLongParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,7 +39,12 @@ public class UserRechargeController {
     /** 套餐列表 */
     @GetMapping("/plans")
     public Result<List<MembershipPlan>> plans() {
-        return Result.success(rechargeService.listActivePlans());
+        try {
+            return Result.success(rechargeService.listActivePlans());
+        } catch (Exception e) {
+            log.warn("套餐查询失败（数据库表可能尚未迁移）: {}", e.getMessage());
+            return Result.success(java.util.Collections.emptyList());
+        }
     }
 
     /** 创建订单 */
@@ -54,7 +60,11 @@ public class UserRechargeController {
         if (planId == null) {
             return Result.fail(ResultEnum.PARAM_ERROR.getCode(), "planId 无效");
         }
-        return Result.success(rechargeService.createOrder(userId, planId));
+        try {
+            return Result.success(rechargeService.createOrder(userId, planId));
+        } catch (BadSqlGrammarException sql) {
+            return Result.fail(500, "数据库尚未初始化，请先执行 expert_wallet_recharge_*.sql");
+        }
     }
 
     /** 模拟付款 */
@@ -66,7 +76,11 @@ public class UserRechargeController {
         Long id = PathLongParser.tryParse(idStr);
         if (id == null) return Result.fail(ResultEnum.PARAM_ERROR.getCode(), "订单ID无效");
         String method = body == null ? null : (String) body.get("payMethod");
-        return Result.success(rechargeService.mockPay(userId, id, method));
+        try {
+            return Result.success(rechargeService.mockPay(userId, id, method));
+        } catch (BadSqlGrammarException sql) {
+            return Result.fail(500, "数据库尚未初始化，请先执行 expert_wallet_recharge_*.sql");
+        }
     }
 
     /** 取消订单 */
@@ -76,7 +90,11 @@ public class UserRechargeController {
         if (userId == null) throw new ServiceException(ResultEnum.NOT_TOKEN);
         Long id = PathLongParser.tryParse(idStr);
         if (id == null) return Result.fail(ResultEnum.PARAM_ERROR.getCode(), "订单ID无效");
-        return Result.success(rechargeService.cancelOrder(userId, id));
+        try {
+            return Result.success(rechargeService.cancelOrder(userId, id));
+        } catch (BadSqlGrammarException sql) {
+            return Result.fail(500, "数据库尚未初始化，请先执行 expert_wallet_recharge_*.sql");
+        }
     }
 
     /** 我的订单分页 */
@@ -86,12 +104,20 @@ public class UserRechargeController {
                                                 @RequestParam(required = false) String status) {
         Long userId = LoginInfo.getUserId();
         if (userId == null) throw new ServiceException(ResultEnum.NOT_TOKEN);
-        IPage<RechargeOrder> page = rechargeService.myOrderPage(userId, pageNum, pageSize, status);
         Map<String, Object> data = new HashMap<>();
-        data.put("list", page.getRecords());
-        data.put("total", page.getTotal());
-        data.put("pageNum", page.getCurrent());
-        data.put("pageSize", page.getSize());
+        try {
+            IPage<RechargeOrder> page = rechargeService.myOrderPage(userId, pageNum, pageSize, status);
+            data.put("list", page.getRecords());
+            data.put("total", page.getTotal());
+            data.put("pageNum", page.getCurrent());
+            data.put("pageSize", page.getSize());
+        } catch (Exception e) {
+            log.warn("订单分页查询失败（数据库表可能尚未迁移）: {}", e.getMessage());
+            data.put("list", java.util.Collections.emptyList());
+            data.put("total", 0);
+            data.put("pageNum", pageNum);
+            data.put("pageSize", pageSize);
+        }
         return Result.success(data);
     }
 
@@ -100,6 +126,11 @@ public class UserRechargeController {
     public Result<UserMembership> myMembership() {
         Long userId = LoginInfo.getUserId();
         if (userId == null) throw new ServiceException(ResultEnum.NOT_TOKEN);
-        return Result.success(rechargeService.getMembership(userId));
+        try {
+            return Result.success(rechargeService.getMembership(userId));
+        } catch (Exception e) {
+            log.warn("会员状态查询失败（数据库表可能尚未迁移）: {}", e.getMessage());
+            return Result.success((UserMembership) null);
+        }
     }
 }

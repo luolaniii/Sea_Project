@@ -197,6 +197,16 @@
             <span class="qtext">专家申请</span>
             <Icon name="external" :size="13" color="#94a3b8" />
           </router-link></li>
+          <li><router-link to="/user/wallet">
+            <span class="qicon"><Icon name="bolt" :size="16" /></span>
+            <span class="qtext">我的钱包</span>
+            <Icon name="external" :size="13" color="#94a3b8" />
+          </router-link></li>
+          <li><router-link to="/user/membership">
+            <span class="qicon"><Icon name="heart" :size="16" /></span>
+            <span class="qtext">会员中心</span>
+            <Icon name="external" :size="13" color="#94a3b8" />
+          </router-link></li>
           <li><router-link to="/user/orders">
             <span class="qicon"><Icon name="list" :size="16" /></span>
             <span class="qtext">我的订单</span>

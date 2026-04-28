@@ -163,12 +163,12 @@ const router = createRouter({
         {
           path: 'wallet',
           name: ROUTE_NAMES.USER_WALLET,
-          redirect: ROUTE_PATHS.USER.PROFILE,
+          component: () => import('@/views/user/UserWallet.vue'),
         },
         {
           path: 'membership',
           name: ROUTE_NAMES.USER_MEMBERSHIP,
-          redirect: ROUTE_PATHS.USER.PROFILE,
+          component: () => import('@/views/user/UserMembership.vue'),
         },
         {
           path: 'orders',

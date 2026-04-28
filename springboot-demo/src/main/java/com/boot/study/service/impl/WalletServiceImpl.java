@@ -13,6 +13,7 @@ import com.boot.study.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -104,7 +105,8 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    // 用 REQUIRES_NEW 隔离，徽章/钱包表未迁移时不影响外层（如评估保存）的事务
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void awardForEvaluation(Long userId, long evaluatedCount) {
         try {
             List<Badge> active = badgeService.listActive();

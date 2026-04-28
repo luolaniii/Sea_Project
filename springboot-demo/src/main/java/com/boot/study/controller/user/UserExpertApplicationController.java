@@ -8,6 +8,7 @@ import com.boot.study.exception.ServiceException;
 import com.boot.study.service.ExpertApplicationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -33,7 +34,11 @@ public class UserExpertApplicationController {
             throw new ServiceException(ResultEnum.NOT_TOKEN);
         }
         form.setUserId(userId);
-        return Result.success(expertApplicationService.submit(form));
+        try {
+            return Result.success(expertApplicationService.submit(form));
+        } catch (BadSqlGrammarException sql) {
+            return Result.fail(500, "数据库尚未初始化，请先执行 expert_wallet_recharge_*.sql");
+        }
     }
 
     /** 我最近一次申请 */
@@ -43,6 +48,11 @@ public class UserExpertApplicationController {
         if (userId == null) {
             throw new ServiceException(ResultEnum.NOT_TOKEN);
         }
-        return Result.success(expertApplicationService.getMyLatest(userId));
+        try {
+            return Result.success(expertApplicationService.getMyLatest(userId));
+        } catch (Exception e) {
+            log.warn("专家申请查询失败（数据库表可能尚未迁移）: {}", e.getMessage());
+            return Result.success((ExpertApplication) null);
+        }
     }
 }

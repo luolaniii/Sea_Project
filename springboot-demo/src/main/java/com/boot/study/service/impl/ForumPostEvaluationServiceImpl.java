@@ -81,12 +81,19 @@ public class ForumPostEvaluationServiceImpl extends BaseServiceImpl<ForumPostEva
         refreshPostReliability(evaluation.getPostId());
 
         // 评审奖励 hook：按当前评估人累计有效评估数发放徽章 + 奖励币
+        // 失败不应阻断评估保存（钱包表未迁移、奖励链异常等）
         Long evaluatorId = evaluation.getEvaluatorId();
         if (evaluatorId != null) {
-            long count = count(new LambdaQueryWrapper<ForumPostEvaluation>()
-                    .eq(ForumPostEvaluation::getEvaluatorId, evaluatorId)
-                    .eq(ForumPostEvaluation::getStatus, 1));
-            walletService.awardForEvaluation(evaluatorId, count);
+            try {
+                long count = count(new LambdaQueryWrapper<ForumPostEvaluation>()
+                        .eq(ForumPostEvaluation::getEvaluatorId, evaluatorId)
+                        .eq(ForumPostEvaluation::getStatus, 1));
+                walletService.awardForEvaluation(evaluatorId, count);
+            } catch (Exception ex) {
+                // walletService.awardForEvaluation 自身已使用 REQUIRES_NEW + try/catch，这里再保险一次
+                org.slf4j.LoggerFactory.getLogger(getClass())
+                        .warn("奖励 hook 调用异常，已忽略: {}", ex.getMessage());
+            }
         }
         return evaluation;
     }
