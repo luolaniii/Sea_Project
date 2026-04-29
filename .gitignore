@@ -1,14 +1,18 @@
 # ==============================================
-# 通用缓存
+# 系统 / 通用缓存
 # ==============================================
 .DS_Store
 Thumbs.db
 *.swp
+*.swo
 *.tmp
+*.temp
 *.log
 .qoder/
 
-# IDE配置
+# ==============================================
+# IDE 配置
+# ==============================================
 .idea/
 .vscode/
 *.iml
@@ -16,48 +20,94 @@ Thumbs.db
 *.ipr
 
 # ==============================================
-# 前端 front 强制忽略（核心！）
+# 前端 front
 # ==============================================
-# 忽略front下所有node_modules（无论层级）
 front/node_modules/
 front/**/node_modules/
 
-# 忽略front下所有打包文件夹
 front/dist/
 front/build/
 front/output/
+front/.vite/
+front/.cache/
 
-# 忽略前端环境变量、日志
-front/.env*
 front/npm-debug.log*
 front/yarn-debug.log*
+front/pnpm-debug.log*
+
+# 前端环境变量：忽略真实配置，保留示例配置
+front/.env
+front/.env.local
+front/.env.development.local
+front/.env.production.local
+!front/.env.example
 
 # ==============================================
-# 后端 springboot-demo 忽略
+# 后端 springboot-demo
 # ==============================================
 springboot-demo/target/
-springboot-demo/*.class
-springboot-demo/.mvn/
-springboot-demo/mvnw
-springboot-demo/mvnw.cmd
-springboot-demo/application-dev.yml
+springboot-demo/**/*.class
+
+# 后端日志 / 运行缓存 / 上传文件
+springboot-demo/logs/
+springboot-demo/upload/
+springboot-demo/uploads/
+springboot-demo/tmp/
+springboot-demo/temp/
+
+# 后端本地配置：忽略真实配置，保留示例配置
+springboot-demo/src/main/resources/application-dev.yml
+springboot-demo/src/main/resources/application-local.yml
+springboot-demo/src/main/resources/application-prod.yml
+!springboot-demo/src/main/resources/application-example.yml
+
+# 如果你的 application.yml 里包含数据库密码、Redis密码，也建议忽略
+# springboot-demo/src/main/resources/application.yml
 
 # ==============================================
-# 你的要求：忽略所有md文件
+# Maven Wrapper
 # ==============================================
-*.md
+# 一般建议保留以下文件，不要忽略：
+# springboot-demo/mvnw
+# springboot-demo/mvnw.cmd
+# springboot-demo/.mvn/
+
+# 如果你确定不用 Maven Wrapper，才取消下面三行注释
+# springboot-demo/mvnw
+# springboot-demo/mvnw.cmd
+# springboot-demo/.mvn/
 
 # ==============================================
-# 其他压缩包/可执行文件
+# 数据文件 / 论文 / 私密资料
+# 建议放到固定目录后统一忽略
 # ==============================================
+data/
+dataset/
+datasets/
+docs/private/
+paper/
+论文/
+资料/
+
+# 常见大文件 / 压缩包
 *.zip
 *.rar
+*.7z
+*.tar
+*.gz
 *.exe
 
 # ==============================================
-# 不上传数据源/描述文档
+# 文档规则
 # ==============================================
-*.txt
-*.pdf
-*.doc
-*.docx
+# 不建议全局忽略所有 md，否则 README.md 也会被忽略
+# 如果你确实不想上传普通说明文档，可以只忽略 docs 下的
+docs/**/*.txt
+docs/**/*.pdf
+docs/**/*.doc
+docs/**/*.docx
+
+# 保留重要项目说明
+!README.md
+!front/README.md
+!springboot-demo/README.md.claude/
